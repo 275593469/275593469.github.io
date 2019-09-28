@@ -43,7 +43,7 @@ private boolean noProtectLogin(string userName, string password){
 
 1) 输入正常数据，效果如图：
 
-[![image](https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922046482.png "image")](http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311921598057.png)
+[![image](../../images/2016/201210311922046482.png "image")](http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311921598057.png)
 
 合并的SQL为：
 
