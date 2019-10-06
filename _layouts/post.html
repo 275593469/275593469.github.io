@@ -1,7 +1,7 @@
 ---
 layout: default
 ---
-
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gitalk@1/dist/gitalk.css">
 <div class="page clearfix" post>
     <div class="left">
         <h1>{{page.title}}</h1>
@@ -66,8 +66,10 @@ layout: default
 
         {% include previousAndNext.html %}
 
+        {% if site.comments.gitalk.enable %}
         <h2 id="comments">Comments</h2>
         {% include comments.html %}
+        {% endif %}
 
 
     </div>
@@ -103,4 +105,5 @@ layout: default
     }
 }());
 </script>
+<script src="https://cdn.jsdelivr.net/npm/gitalk@1/dist/gitalk.min.js"></script>
 <script src="{{ "/js/pageContent.js " | prepend: site.baseurl }}" charset="utf-8"></script>
