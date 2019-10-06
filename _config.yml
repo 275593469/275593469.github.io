@@ -30,7 +30,7 @@ description_footer: 来自jiangc的个人专栏！
 comments:
   gitalk:
     enable: true
-    owner: jiangc
+    owner: 275593469
     repo: 275593469.github.io
     clientID: 937c1a5d8a796d584ca6
     clientSecret: 3c50edbfc151298e95d00b11ca78e5d1d472559e
