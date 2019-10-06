@@ -6,11 +6,10 @@ tags: zookeeper
 author: jiangc
 excerpt: 简单理解Zookeeper的Leader选举
 ---
-**简单理解Zookeeper的Leader选举**
+* content
+{:toc}
 
-2018年01月28日 22:06:39 [程裕强](https://me.csdn.net/chengyuqiang)
-
- 版权声明：本文为博主原创文章，欢迎转载。 https://blog.csdn.net/chengyuqiang/article/details/79190061
+>  转载：[简单理解Zookeeper的Leader选举](https://blog.csdn.net/chengyuqiang/article/details/79190061)
 
 Leader选举是保证分布式数据一致性的关键所在。Leader选举分为Zookeeper集群初始化启动时选举和Zookeeper集群运行期间Leader重新选举两种情况。在讲解Leader选举前先了解一下Zookeeper节点4种可能状态和事务ID概念。
 

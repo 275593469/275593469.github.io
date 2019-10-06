@@ -6,7 +6,8 @@ tags: 集群 安装
 author: jiangc
 excerpt: Linux下Redis集群安装部署及使用详解
 ---
-[**Linux 下Redis集群安装部署及使用详解(在线和离线两种安装+相关错误解决方案)**](https://www.cnblogs.com/xuliangxing/p/7146868.html)
+* content
+{:toc}
 
 # 一、应用场景介绍
 

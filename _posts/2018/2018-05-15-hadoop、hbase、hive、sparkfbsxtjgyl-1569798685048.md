@@ -6,15 +6,11 @@ tags: hadoop hbase hive spark
 author: jiangc
 excerpt: hadoop、hbase、hive、spark分布式系统架构原理
 ---
-**hadoop、hbase、hive、spark分布式系统架构原理**
+* content
+{:toc}
 
-2018年05月15日 11:22:50 [数据架构师](https://me.csdn.net/luanpeng825485697) 阅读数：11461更多
+>   转载：https://blog.csdn.net/luanpeng825485697/article/details/80319552
 
-所属专栏： [微服务架构](https://blog.csdn.net/column/details/19467.html)
-
- 版权声明：本文为博主原创文章，转载请注明来源。开发合作联系[email protected] https://blog.csdn.net/luanpeng825485697/article/details/80319552
-
-**全栈工程师开发手册 （作者：栾鹏）**
 
 [**架构系列文章**](https://blog.csdn.net/luanpeng825485697/article/details/83830968)
 

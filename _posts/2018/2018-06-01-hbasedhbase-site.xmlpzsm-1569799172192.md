@@ -6,13 +6,9 @@ tags: hbase 调优
 author: jiangc
 excerpt: hbase的hbase-site.xml配置说明
 ---
-# hbase的hbase-site.xml配置说明
+* content
+{:toc}
 
-[昨夜今夕](https://www.jianshu.com/u/bbfcb01ec952) 关注
-
-2018.06.01 23:53 字数 6051 阅读 194评论 0喜欢 3
-
-[TOC]
 
 ## 摘录一
 
