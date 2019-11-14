@@ -13,20 +13,20 @@ excerpt: 简单理解Zookeeper的Leader选举
 
 Leader选举是保证分布式数据一致性的关键所在。Leader选举分为Zookeeper集群初始化启动时选举和Zookeeper集群运行期间Leader重新选举两种情况。在讲解Leader选举前先了解一下Zookeeper节点4种可能状态和事务ID概念。
 
-**1、Zookeeper节点状态**
+## 1、Zookeeper节点状态
 
 1. LOOKING：寻找Leader状态，处于该状态需要进入选举流程
 2. LEADING：领导者状态，处于该状态的节点说明是角色已经是Leader
 3. FOLLOWING：跟随者状态，表示Leader已经选举出来，当前节点角色是follower
 4. OBSERVER：观察者状态，表明当前节点角色是observer
 
-**2、事务ID**
+## 2、事务ID
 
 ZooKeeper状态的每次变化都接收一个ZXID（ZooKeeper事务id）形式的标记。ZXID是一个64位的数字，由Leader统一分配，全局唯一，不断递增。
 
 ZXID展示了所有的ZooKeeper的变更顺序。每次变更会有一个唯一的zxid，如果zxid1小于zxid2说明zxid1在zxid2之前发生。
 
-**3、Zookeeper集群初始化启动时Leader选举**
+## 3、Zookeeper集群初始化启动时Leader选举
 
 若进行Leader选举，则至少需要两台机器，这里选取3台机器组成的服务器集群为例。
 
@@ -54,7 +54,7 @@ ZXID展示了所有的ZooKeeper的变更顺序。每次变更会有一个唯一�
 
 　　(5)  **改变服务器状态** 。一旦确定了Leader，每个服务器就会更新自己的状态，如果是Follower，那么就变更为FOLLOWING，如果是Leader，就变更为LEADING。当新的Zookeeper节点ZK3启动时，发现已经有Leader了，不再选举，直接将直接的状态从LOOKING改为FOLLOWING。
 
-**4、Zookeeper集群运行期间Leader重新选**
+## 4、Zookeeper集群运行期间Leader重新选
 
 在Zookeeper运行期间，如果Leader节点挂了，那么整个Zookeeper集群将暂停对外服务，进入新一轮Leader选举。
 
