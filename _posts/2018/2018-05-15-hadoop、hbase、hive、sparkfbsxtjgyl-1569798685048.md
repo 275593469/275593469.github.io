@@ -16,9 +16,9 @@ excerpt: hadoop、hbase、hive、spark分布式系统架构原理
 
 机器学习、数据挖掘等各种大数据处理都离不开各种开源分布式系统，hadoop用户分布式存储和map-reduce计算，spark用于分布式机器学习，hive是分布式数据库，hbase是分布式kv系统，看似互不相关的他们却都是基于相同的hdfs存储和yarn资源管理，
 
-**hadoop、spark、Hbase、Hive、hdfs简介**
+## hadoop、spark、Hbase、Hive、hdfs简介
 
-**Hbase** ：是一个nosql数据库，和mongodb类似
+**Hbase** ：是一个nosql数据库，和mongodb类似     
 
 **hdfs** ：hadoop distribut file system，hadoop的分布式文件系统
 
@@ -32,7 +32,7 @@ excerpt: hadoop、hbase、hive、spark分布式系统架构原理
 
 直接导入hive表
 
-     sqoop import --connect jdbc:postgresql://ip/db\_name--username user\_name  --table table\_name  --hive-import -m 5
+     sqoop import --connect jdbc:postgresql://ip/db_name--username user_name  --table table_name  --hive-import -m 5
 
 1. 1
 
@@ -134,31 +134,17 @@ ApplicationMaster当向ResourceManager申请资源，需向它发送一个Resour
 
     optional PriorityProto priority = 1; // 资源优先级
 
-    optional string resource\_name = 2; // 资源名称（期望资源所在的host、rack名称等）
+    optional string resource_name = 2; // 资源名称（期望资源所在的host、rack名称等）
 
     optional ResourceProto capability = 3; // 资源量（仅支持CPU和内存两种资源）
 
-    optional int32 num\_containers = 4; // 满足以上条件的资源个数
+    optional int32 num_containers = 4; // 满足以上条件的资源个数
 
-    optional bool relax\_locality = 5 [default = true];  //是否支持本地性松弛（2.1.0-beta之后的版本新增加的，具体参考我的这篇文章：Hadoop新特性、改进、优化和Bug分析系列3：YARN-392）
+    optional bool relax_locality = 5 [default = true];  //是否支持本地性松弛（2.1.0-beta之后的版本新增加的，具体参考我的这篇文章：Hadoop新特性、改进、优化和Bug分析系列3：YARN-392）
 
     }
 
-1. 1
-2. 2
-3. 3
-4. 4
-5. 5
-6. 6
-7. 7
-8. 8
-9. 9
-10. 10
-11. 11
-12. 12
-13. 13
-
-通过上面的信息也看出了，资源不一定在当前主机上。可以为应用程序申请任意大小的资源量（CPU和内存），且默认情况下资源是本地性松弛的，即申请优先级为10，资源名称为&quot;node11&quot;，资源量为\&lt;2GB, 1cpu\&gt;的5份资源时，如果节点node11上没有满足要求的资源，则优先找node11同一机架上其他节点上满足要求的资源，如果仍找不到，则找其他机架上的资源。而如果你一定要node11上的节点，则将relax\_locality置为false。
+通过上面的信息也看出了，资源不一定在当前主机上。可以为应用程序申请任意大小的资源量（CPU和内存），且默认情况下资源是本地性松弛的，即申请优先级为10，资源名称为&quot;node11&quot;，资源量为\&lt;2GB, 1cpu>的5份资源时，如果节点node11上没有满足要求的资源，则优先找node11同一机架上其他节点上满足要求的资源，如果仍找不到，则找其他机架上的资源。而如果你一定要node11上的节点，则将relax_locality置为false。
 
 发出资源请求后，资源调度器并不会立马为它返回满足要求的资源，而需要应用程序的ApplicationMaster不断与ResourceManager通信，探测分配到的资源，并拉取过来使用。一旦分配到资源后，ApplicatioMaster可从资源调度器那获取以Container表示的资源，Container可看做一个可序列化Java对象，包含的字段信息（直接给出了Protocol Buffers定义）如下：
 
@@ -168,31 +154,15 @@ ApplicationMaster当向ResourceManager申请资源，需向它发送一个Resour
 
     optional NodeIdProto nodeId = 2; //container（资源）所在节点
 
-    optional string node\_http\_address = 3;
+    optional string node_http_address = 3;
 
     optional ResourceProto resource = 4; //container资源量
 
     optional PriorityProto priority = 5; //container优先级
 
-    optional hadoop.common.TokenProto container\_token = 6; //container token，用于安全认证
+    optional hadoop.common.TokenProto container_token = 6; //container token，用于安全认证
 
     }
-
-1. 1
-2. 2
-3. 3
-4. 4
-5. 5
-6. 6
-7. 7
-8. 8
-9. 9
-10. 10
-11. 11
-12. 12
-13. 13
-14. 14
-15. 15
 
 一般而言，每个Container可用于运行一个任务。ApplicationMaster收到一个或多个Container后，再次将该Container进一步分配给内部的某个任务，一旦确定该任务后，ApplicationMaster需将该任务运行环境（包含运行命令、环境变量、依赖的外部文件等）连同Container中的资源信息封装到ContainerLaunchContext对象中，进而与对应的NodeManager通信，以启动该任务。ContainerLaunchContext包含的字段信息（直接给出了Protocol Buffers定义）如下：
 
@@ -202,31 +172,16 @@ ApplicationMaster当向ResourceManager申请资源，需向它发送一个Resour
 
     optional bytes tokens = 2;
 
-    repeated StringBytesMapProto service\_data = 3;
+    repeated StringBytesMapProto service_data = 3;
 
     repeated StringStringMapProto environment = 4; //Container启动所需的环境变量
 
     repeated string command = 5; //Container内部运行的任务启动命令，如果是MapReduce的话，Map/Reduce Task启动命令就在该字段中
 
-    repeated ApplicationACLMapProto application\_ACLs = 6;
+    repeated ApplicationACLMapProto application_ACLs = 6;
 
     }
 
-1. 1
-2. 2
-3. 3
-4. 4
-5. 5
-6. 6
-7. 7
-8. 8
-9. 9
-10. 10
-11. 11
-12. 12
-13. 13
-14. 14
-15. 15
 
 每个ContainerLaunchContext和对应的Container信息（被封装到了ContainerToken中）将再次被封装到StartContainerRequest中，也就是说，ApplicationMaster最终发送给NodeManager的是StartContainerRequest，每个StartContainerRequest对应一个Container和任务。
 
@@ -236,29 +191,19 @@ HDFS即Hadoop Distributed File System分布式文件系统，它的设计目标�
 
 **设计前提和目标**
 
-专为存储超大文件而设计：hdfs应该能够支持GB级别大小的文件；它应该能够提供很大的数据带宽并且能够在集群中拓展到成百上千个节点；它的一个实例应该能够支持千万数量级别的文件。
-适用于流式的数据访问：hdfs适用于批处理的情况而不是交互式处理；它的重点是保证高吞吐量而不是低延迟的用户响应
-容错性：完善的冗余备份机制
-支持简单的一致性模型：HDFS需要支持一次写入多次读取的模型，而且写入过程文件不会经常变化
-移动计算优于移动数据：HDFS提供了使应用计算移动到离它最近数据位置的接口
-兼容各种硬件和软件平台
+    1、专为存储超大文件而设计：hdfs应该能够支持GB级别大小的文件；它应该能够提供很大的数据带宽并且能够在集群中拓展到成百上千个节点；它的一个实例应该能够支持千万数量级别的文件。
+    2、适用于流式的数据访问：hdfs适用于批处理的情况而不是交互式处理；它的重点是保证高吞吐量而不是低延迟的用户响应
+    3、容错性：完善的冗余备份机制
+    4、支持简单的一致性模型：HDFS需要支持一次写入多次读取的模型，而且写入过程文件不会经常变化
+    5、移动计算优于移动数据：HDFS提供了使应用计算移动到离它最近数据位置的接口
+    6、兼容各种硬件和软件平台
 
-1. 1
-2. 2
-3. 3
-4. 4
-5. 5
-6. 6
 
 **不适合的场景**
 
-大量小文件：文件的元数据都存储在NameNode内存中，大量小文件会占用大量内存。
-低延迟数据访问：hdfs是专门针对高数据吞吐量而设计的
-多用户写入，任意修改文件
-
-1. 1
-2. 2
-3. 3
+    1、大量小文件：文件的元数据都存储在NameNode内存中，大量小文件会占用大量内存。
+    2、低延迟数据访问：hdfs是专门针对高数据吞吐量而设计的
+    3、多用户写入，任意修改文件
 
 **hdfs架构设计**
 
@@ -272,15 +217,11 @@ HDFS即Hadoop Distributed File System分布式文件系统，它的设计目标�
 
 hdfs按块存储还有如下好处：
 
-文件可以任意大，也不用担心单个结点磁盘容量小于文件的情况
-简化了文件子系统的设计，子系统只存储文件块数据，而文件元数据则交由其它系统（NameNode）管理
-有利于备份和提高系统可用性，因为可以以块为单位进行备份，hdfs默认备份数量为3。
-有利于负载均衡
+    1、文件可以任意大，也不用担心单个结点磁盘容量小于文件的情况
+    2、简化了文件子系统的设计，子系统只存储文件块数据，而文件元数据则交由其它系统（NameNode）管理
+    3、有利于备份和提高系统可用性，因为可以以块为单位进行备份，hdfs默认备份数量为3。
+    4、有利于负载均衡
 
-1. 1
-2. 2
-3. 3
-4. 4
 
 **NameNode**
 
@@ -290,13 +231,9 @@ NameNode管理着文件系统命名空间，它维护着文件系统树及树中
 
 NameNode保存元信息的种类有：
 
-文件名目录名及它们之间的层级关系
-文件目录的所有者及其权限
-每个文件块的名及文件有哪些块组成
-
-1. 1
-2. 2
-3. 3
+    1、文件名目录名及它们之间的层级关系
+    2、文件目录的所有者及其权限
+    3、每个文件块的名及文件有哪些块组成
 
 需要注意的是，NameNode元信息并不包含每个块的位置信息，这些信息会在NameNode启动时从各个DataNode获取并保存在内存中，因为这些信息会在系统启动时由数据节点重建。把块位置信息放在内存中，在读取数据时会减少查询时间，增加读取效率。NameNode也会实时通过心跳机制和DataNode进行交互，实时检查文件系统是否运行正常。不过NameNode元信息会保存各个块的名称及文件由哪些块组成。
 
@@ -331,32 +268,32 @@ Edits文件存在的目的是为了提高系统的操作效率，NameNode在更�
 
 SecondaryNameNode的角色就是定期的合并edits和fsimage文件，我们来看一下合并的步骤：
 
-1. 合并之前告知NameNode把所有的操作写到新的edites文件并将其命名为edits.new。
-2. SecondaryNameNode从NameNode请求fsimage和edits文件
-3. SecondaryNameNode把fsimage和edits文件合并成新的fsimage文件
-4. NameNode从SecondaryNameNode获取合并好的新的fsimage并将旧的替换掉，并把edits用第一步创建的edits.new文件替换掉
-5. 更新fstime文件中的检查点
+    1. 合并之前告知NameNode把所有的操作写到新的edites文件并将其命名为edits.new。
+    2. SecondaryNameNode从NameNode请求fsimage和edits文件
+    3. SecondaryNameNode把fsimage和edits文件合并成新的fsimage文件
+    4. NameNode从SecondaryNameNode获取合并好的新的fsimage并将旧的替换掉，并把edits用第一步创建的edits.new文件替换掉
+    5. 更新fstime文件中的检查点
 
 最后再总结一下整个过程中涉及到NameNode中的相关文件
 
-1. fsimage ：保存的是上个检查点的HDFS的元信息
-2. edits ：保存的是从上个检查点开始发生的HDFS元信息状态改变信息
-3. fstime：保存了最后一个检查点的时间戳
+    1. fsimage ：保存的是上个检查点的HDFS的元信息
+    2. edits ：保存的是从上个检查点开始发生的HDFS元信息状态改变信息
+    3. fstime：保存了最后一个检查点的时间戳
 
 **MapReduce分布式计算架构**
 
 **MapReduce特点：**
 
-1. 易于编程，用户通常情况下只需要编写Mapper和Reducer程序即可。
-2. 良好的扩展性，即可以很容易的增加节点
-3. 高容错性，一个Job默认情况下会尝试启动两次，一个mapper或者reducer默认会尝试4次，如果一个节点挂了，可以向系统申请新的节点来执行这个mapper或者reducer
-4. 适合PB级别的数据的离线处理
+    1. 易于编程，用户通常情况下只需要编写Mapper和Reducer程序即可。
+    2. 良好的扩展性，即可以很容易的增加节点
+    3. 高容错性，一个Job默认情况下会尝试启动两次，一个mapper或者reducer默认会尝试4次，如果一个节点挂了，可以向系统申请新的节点来执行这个mapper或者reducer
+    4. 适合PB级别的数据的离线处理
 
 **MapReduce框架的缺点**
 
-1. 不擅长实时计算，像MySQL一样能够立即返回结果
-2. MapReduce的设计本身决定了处理的数据必须是离线数据，因为涉及到数据切分等等。
-3. 不擅长DAG（有向图）计算，需要一个Job执行完成之后，另一个Job才能使用他的输出。
+    1. 不擅长实时计算，像MySQL一样能够立即返回结果
+    2. MapReduce的设计本身决定了处理的数据必须是离线数据，因为涉及到数据切分等等。
+    3. 不擅长DAG（有向图）计算，需要一个Job执行完成之后，另一个Job才能使用他的输出。
 
 **MapReduce编程模型：**
 
@@ -364,8 +301,8 @@ SecondaryNameNode的角色就是定期的合并edits和fsimage文件，我们来
 
 MapReduce将整个并行计算过程抽象到两个函数
 
-1. Map（映射）：对一些独立元素组成的列表的每一个元素进行指定的操作，可以高度并行。
-2. Reduce（化简）：对一个列表的元素进行合并。
+    1. Map（映射）：对一些独立元素组成的列表的每一个元素进行指定的操作，可以高度并行。
+    2. Reduce（化简）：对一个列表的元素进行合并。
 
 例如wordcount功能：
 
@@ -375,23 +312,23 @@ Reduce阶段：每个Reduce程序从Map的结果中拉取自己要处理的分�
 
 一个简单的MapReduce程序只需要指定map()、reduce()、input和output，剩下的事由架构完成。
 
-input()——\&gt;map()——\&gt;reduce()——\&gt;output()
+input()——>map()——>reduce()——>output()
 
 每个应用程序称为一个作业（Job），每个Job由一系列的Mappers和Reducers来完成。 每个Mapper处理一个分片（Split），处理过程如下：
 
 Map阶段：
 
-1. 输入数据的解析：InputFormat
-2. 输入数据处理：Mapper
-3. 输入分组：Partitioner
-4. 本节点的规约：Combiner ，
+    1. 输入数据的解析：InputFormat
+    2. 输入数据处理：Mapper
+    3. 输入分组：Partitioner
+    4. 本节点的规约：Combiner ，
 
 Reduce阶段：
 
-1. Shuffling阶段拉取数据
-2. 桶排序，是一个hash过程，使得相同的Key可以排在一堆
-3. 数据规约：Reducer
-4. 数据输出格式： OutputFormat
+    1. Shuffling阶段拉取数据
+    2. 桶排序，是一个hash过程，使得相同的Key可以排在一堆
+    3. 数据规约：Reducer
+    4. 数据输出格式： OutputFormat
 
 **MapReduce2.0 架构**
 
@@ -401,21 +338,21 @@ MapReduce2.0运行在YARN之上。YARN由ResourceManager（RM） 和NodeManager�
 
 **MapReduce2 架构设计：**
 
-1:用户向YARN中提交应用程序，其中包括ApplicationMaster程序、启动ApplicationMaster的命令、用户程序等。
-
-2:ResourceManager为该应用程序分配第一个Container，并与对应的Node-Manager通信，要求它在这个Container中启动应用程序的ApplicationMaster。
-
-3:ApplicationMaster首先向ResourceManager注册，这样用户可以直接通过ResourceManage查看应用程序的运行状态，然后它将为各个任务申请资源，并监控它的运行状态，直到运行结束，即重复步骤4~7。
-
-4:ApplicationMaster采用轮询的方式通过RPC协议向ResourceManager申请和领取资源。
-
-5:一旦ApplicationMaster申请到资源后，便与对应的NodeManager通信，要求它启动任务。
-
-6:NodeManager为任务设置好运行环境（包括环境变量、JAR包、二进制程序等）后，将任务启动命令写到一个脚本中，并通过运行该脚本启动任务。
-
-7:各个任务通过某个RPC协议向ApplicationMaster汇报自己的状态和进度，以让ApplicationMaster随时掌握各个任务的运行状态，从而可以在任务失败时重新启动任务。在应用程序运行过程中，用户可随时通过RPC向ApplicationMaster查询应用程序的当前运行状态。
-
-8:应用程序运行完成后，ApplicationMaster向ResourceManager注销并关闭自己。
+    1:用户向YARN中提交应用程序，其中包括ApplicationMaster程序、启动ApplicationMaster的命令、用户程序等。
+    
+    2:ResourceManager为该应用程序分配第一个Container，并与对应的Node-Manager通信，要求它在这个Container中启动应用程序的ApplicationMaster。
+    
+    3:ApplicationMaster首先向ResourceManager注册，这样用户可以直接通过ResourceManage查看应用程序的运行状态，然后它将为各个任务申请资源，并监控它的运行状态，直到运行结束，即重复步骤4~7。
+    
+    4:ApplicationMaster采用轮询的方式通过RPC协议向ResourceManager申请和领取资源。
+    
+    5:一旦ApplicationMaster申请到资源后，便与对应的NodeManager通信，要求它启动任务。
+    
+    6:NodeManager为任务设置好运行环境（包括环境变量、JAR包、二进制程序等）后，将任务启动命令写到一个脚本中，并通过运行该脚本启动任务。
+    
+    7:各个任务通过某个RPC协议向ApplicationMaster汇报自己的状态和进度，以让ApplicationMaster随时掌握各个任务的运行状态，从而可以在任务失败时重新启动任务。在应用程序运行过程中，用户可随时通过RPC向ApplicationMaster查询应用程序的当前运行状态。
+    
+    8:应用程序运行完成后，ApplicationMaster向ResourceManager注销并关闭自己。
 
 **MapReduce1 的架构设计：**
 
@@ -455,27 +392,21 @@ Reduce Task: 归约任务
 
 在dfs中创建input目录
 
-[email protected] data]# hadoop fs -mkdir /wc/input
-
-1. 1
+    [email protected] data]# hadoop fs -mkdir /wc/input
 
 将data中的.data文件拷贝到dfs中的input
 
-[email protected] data]# hadoop fs -put ./\*.data /wc/input
+    [email protected] data]# hadoop fs -put ./*.data /wc/input
 
-1. 1
 
 查看
 
-[email protected] data]# hadoop fs -ls /wc/input
+    [email protected] data]# hadoop fs -ls /wc/input
 
-1. 1
 
 运行wordcount
 
-[email protected] hadoop-2.7.3]# hadoop jar hadoop-examples-1.2.1.jar wordcount /wc/input /wc/output
-
-1. 1
+    [email protected] hadoop-2.7.3]# hadoop jar hadoop-examples-1.2.1.jar wordcount /wc/input /wc/output
 
 **MapReduce基本流程**
 
@@ -493,23 +424,23 @@ Reduce Task: 归约任务
 
 **Map任务处理**
 
-1，读取输入文件内容，解析成key、value对。对输入文件的每一行，解析成key、value对。每一个键值对调用一次map函数。
-
-2，写自己的逻辑，对输入的key、value处理，转换成新的key、value输出。
-
-3，对输出的key、value进行分区
-
-4、对不同分区的数据，按照key进行排序、分组。相同key的value放到一个集合中。
-
-5、（可选）分组后的数据进行归约。
+    1，读取输入文件内容，解析成key、value对。对输入文件的每一行，解析成key、value对。每一个键值对调用一次map函数。
+    
+    2，写自己的逻辑，对输入的key、value处理，转换成新的key、value输出。
+    
+    3，对输出的key、value进行分区
+    
+    4、对不同分区的数据，按照key进行排序、分组。相同key的value放到一个集合中。
+    
+    5、（可选）分组后的数据进行归约。
 
 **Reduce任务处理**
 
-1，对多个map任务的输出，按照不同的分区，通过网络copy到不同的reduce节点。
-
-2，对多个map任务的输出进行合并、排序。写reduce函数自己的逻辑，对输入的key、value处理，转换成新的key、value输出。
-
-3、把reduce的输出保存到文件中。
+    1，对多个map任务的输出，按照不同的分区，通过网络copy到不同的reduce节点。
+    
+    2，对多个map任务的输出进行合并、排序。写reduce函数自己的逻辑，对输入的key、value处理，转换成新的key、value输出。
+    
+    3、把reduce的输出保存到文件中。
 
 **编写MapReduce程序**
 
@@ -517,31 +448,21 @@ Reduce Task: 归约任务
 
 MapReduce中，map和reduce函数遵循如下常规格式：
 
-map：（K1，V1）——\&gt;list（K2，V2）
-reduce：（K2，list（V2）） ——\&gt;list（K3，V3）
-
-1. 1
-2. 2
+    map：（K1，V1）——>list（K2，V2）
+    reduce：（K2，list（V2）） ——>list（K3，V3）
 
 Mapper的接口：
 
-protected void reduce(KEY key,Iterable\&lt;VALUE\&gt;values,Context context) throws IOException,interruptedException {
+    protected void reduce(KEY key,Iterable\&lt;VALUE>values,Context context) throws IOException,interruptedException {
+    
+    }
 
-}
-
-1. 1
-2. 2
-3. 3
 
 Reduce的接口：
 
-protected void reduce(KEY key,Iterable\&lt;VALUE\&gt;values,Context context) throws IOException,interruptedException {
-
-}
-
-1. 1
-2. 2
-3. 3
+    protected void reduce(KEY key,Iterable\&lt;VALUE>values,Context context) throws IOException,interruptedException {
+    
+    }
 
 **Spark相对于MapReduce的优势**
 
@@ -591,31 +512,29 @@ c）Map端和Reduce端均需要排序
 
 即独立模式，自带完整的服务，可单独部署到一个集群中，无需依赖任何其他资源管理系统。从一定程度上说，该模式是其他两种的基础。借鉴Spark开发模式，我们可以得到一种开发新型计算框架的一般思路：先设计出它的standalone模式，为了快速开发，起初不需要考虑服务（比如master/slave）的容错性，之后再开发相应的wrapper，将stanlone模式下的服务原封不动的部署到资源管理系统yarn或者mesos上，由资源管理系统负责服务本身的容错。目前Spark在standalone模式下是没有任何单点故障问题的，这是借助zookeeper实现的，思想类似于Hbase master单点故障解决方案。将Spark standalone与MapReduce比较，会发现它们两个在架构上是完全一致的：
 
-1.
-  1. 都是由master/slaves服务组成的，且起初master均存在单点故障，后来均通过zookeeper解决（Apache MRv1的JobTracker仍存在单点问题，但CDH版本得到了解决）；
+1.1. 都是由master/slaves服务组成的，且起初master均存在单点故障，后来均通过zookeeper解决（Apache MRv1的JobTracker仍存在单点问题，但CDH版本得到了解决）；
 
-1.
-  1. 各个节点上的资源被抽象成粗粒度的slot，有多少slot就能同时运行多少task。不同的是，MapReduce将slot分为map slot和reduce slot，它们分别只能供Map Task和Reduce Task使用，而不能共享，这是MapReduce资源利率低效的原因之一，而Spark则更优化一些，它不区分slot类型，只有一种slot，可以供各种类型的Task使用，这种方式可以提高资源利用率，但是不够灵活，不能为不同类型的Task定制slot资源。总之，这两种方式各有优缺点。
+1.2. 各个节点上的资源被抽象成粗粒度的slot，有多少slot就能同时运行多少task。不同的是，MapReduce将slot分为map slot和reduce slot，它们分别只能供Map Task和Reduce Task使用，而不能共享，这是MapReduce资源利率低效的原因之一，而Spark则更优化一些，它不区分slot类型，只有一种slot，可以供各种类型的Task使用，这种方式可以提高资源利用率，但是不够灵活，不能为不同类型的Task定制slot资源。总之，这两种方式各有优缺点。
 
 流程：
 
-1、使用SparkSubmit提交任务的时候(包括Eclipse或者其它开发工具使用new SparkConf()来运行任务的时候)，Driver运行在Client；使用SparkShell提交的任务的时候，Driver是运行在Master上
-
-2、使用SparkSubmit提交任务的时候，使用本地的Client类的main函数来创建sparkcontext并初始化它；
-
-3、SparkContext连接到Master，注册并申请资源（内核和内存）。
-
-4、Master根据SC提出的申请，根据worker的心跳报告，来决定到底在那个worker上启动StandaloneExecutorBackend（executor）
-
-5、executor向SC注册
-
-6、SC将应用分配给executor，
-
-7、SC解析应用，创建DAG图，提交给DAGScheduler进行分解成stage(当出发action操作的时候，就会产生job，每个job中包含一个或者多个stage，stage一般在获取外部数据或者shuffle之前产生)。然后stage（又称为Task Set）被发送到TaskScheduler。TaskScheduler负责将stage中的task分配到相应的worker上，并由executor来执行
-
-8、executor创建Executor线程池，开始执行task，并向SC汇报
-
-9、所有的task执行完成之后，SC向Master注销
+    1、使用SparkSubmit提交任务的时候(包括Eclipse或者其它开发工具使用new SparkConf()来运行任务的时候)，Driver运行在Client；使用SparkShell提交的任务的时候，Driver是运行在Master上
+    
+    2、使用SparkSubmit提交任务的时候，使用本地的Client类的main函数来创建sparkcontext并初始化它；
+    
+    3、SparkContext连接到Master，注册并申请资源（内核和内存）。
+    
+    4、Master根据SC提出的申请，根据worker的心跳报告，来决定到底在那个worker上启动StandaloneExecutorBackend（executor）
+    
+    5、executor向SC注册
+    
+    6、SC将应用分配给executor，
+    
+    7、SC解析应用，创建DAG图，提交给DAGScheduler进行分解成stage(当出发action操作的时候，就会产生job，每个job中包含一个或者多个stage，stage一般在获取外部数据或者shuffle之前产生)。然后stage（又称为Task Set）被发送到TaskScheduler。TaskScheduler负责将stage中的task分配到相应的worker上，并由executor来执行
+    
+    8、executor创建Executor线程池，开始执行task，并向SC汇报
+    
+    9、所有的task执行完成之后，SC向Master注销
 
 ![image](/images/2018\05\dsj\1569798685084.jpg "image")
 
@@ -649,35 +568,35 @@ Spark on Standalone 也有 standalone client 和 standalone clusters 模式。
 
 yarn client流程
 
-1、spark-submit脚本提交，Driver在客户端本地运行；
-
-2、Client向RM申请启动AM，同时在SC（client上）中创建DAGScheduler和TaskScheduler。
-
-3、RM收到请求之后，查询NM并选择其中一个，分配container，并在container中开启AM
-
-4、client中的SC初始化完成之后，与AM进行通信，向RM注册，根据任务信息向RM申请资源
-
-5、AM申请到资源之后，与AM进行通信，要求在它申请的container中开启CoarseGrainedExecutorBackend(executor)。Executor在启动之后会向SC注册并申请task
-
-6、SC分配task给executor，executor执行任务并向Driver（运行在client之上的）汇报，以便客户端可以随时监控任务的运行状态
-
-7、任务运行完成之后，client的SC向RM注销自己并关闭自己
+    1、spark-submit脚本提交，Driver在客户端本地运行；
+    
+    2、Client向RM申请启动AM，同时在SC（client上）中创建DAGScheduler和TaskScheduler。
+    
+    3、RM收到请求之后，查询NM并选择其中一个，分配container，并在container中开启AM
+    
+    4、client中的SC初始化完成之后，与AM进行通信，向RM注册，根据任务信息向RM申请资源
+    
+    5、AM申请到资源之后，与AM进行通信，要求在它申请的container中开启CoarseGrainedExecutorBackend(executor)。Executor在启动之后会向SC注册并申请task
+    
+    6、SC分配task给executor，executor执行任务并向Driver（运行在client之上的）汇报，以便客户端可以随时监控任务的运行状态
+    
+    7、任务运行完成之后，client的SC向RM注销自己并关闭自己
 
 ![image](/images/2018\05\dsj\1569798685089.jpg "image")
 
 yarn cluster流程
 
-1、spark-submit脚本提交，向yarn（RM）中提交ApplicationMaster程序、AM启动的命令和需要在Executor中运行的程序等
-
-2、RM收到请求之后，选择一个NM，在其上开启一个container，在container中开启AM，并在AM中完成SC的初始化
-
-3、SC向RM注册并请求资源，这样用户可以在RM中查看任务的运行情况。RM根据请求采用轮询的方式和RPC协议向各个NM申请资源并监控任务的运行状况直到结束
-
-4、AM申请到资源之后，与对应的NM进行通信，要求在其上获取到的Container中开启CoarseGrainedExecutorBackend(executor),executor 开启之后，向AM中的SC注册并申请task
-
-5、AM中的SC分配task给executor，executor运行task兵向AM中的SC汇报自己的状态和进度
-
-6、应用程序完成之后（各个task都完成之后），AM向RM申请注销自己兵关闭自己
+    1、spark-submit脚本提交，向yarn（RM）中提交ApplicationMaster程序、AM启动的命令和需要在Executor中运行的程序等
+    
+    2、RM收到请求之后，选择一个NM，在其上开启一个container，在container中开启AM，并在AM中完成SC的初始化
+    
+    3、SC向RM注册并请求资源，这样用户可以在RM中查看任务的运行情况。RM根据请求采用轮询的方式和RPC协议向各个NM申请资源并监控任务的运行状况直到结束
+    
+    4、AM申请到资源之后，与对应的NM进行通信，要求在其上获取到的Container中开启CoarseGrainedExecutorBackend(executor),executor 开启之后，向AM中的SC注册并申请task
+    
+    5、AM中的SC分配task给executor，executor运行task兵向AM中的SC汇报自己的状态和进度
+    
+    6、应用程序完成之后（各个task都完成之后），AM向RM申请注销自己兵关闭自己
 
 ![image](/images/2018\05\dsj\1569798685092.jpg "image")
 
@@ -763,15 +682,9 @@ HBase Tables 通过行健的范围（row key range）被水平切分成多个Reg
 
     -监控所有集群当中的Region Server实例，从ZooKeeper中监听通知。
 
-1. 1
-2. 2
-3. 3
-
 管理功能：
 
     -提供创建、删除、更新表的接口。
-
-1. 1
 
 ![image](/images/2018\05\dsj\1569798685111.jpg "image")
 

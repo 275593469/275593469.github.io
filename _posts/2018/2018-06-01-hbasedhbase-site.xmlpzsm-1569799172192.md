@@ -388,7 +388,7 @@ HMaster server验证登录使用的kerberos keytab 文件路径。(译者注：H
 
 **hbase.master.kerberos.principal**
 
-例如. &quot;hbase/[\[email protected]](mailto:[email protected])&quot;. HMaster运行需要使用 kerberos principal name. principal name 可以在: user/[email protected] 中获取. 如果 &quot;\_HOST&quot; 被用做hostname portion，需要使用实际运行的hostname来替代它。
+例如. &quot;hbase/[_HOST@EXAMPLE.COM](mailto:[email protected])&quot;. HMaster运行需要使用 kerberos principal name. principal name 可以在: user/[email protected] 中获取. 如果 &quot;\_HOST&quot; 被用做hostname portion，需要使用实际运行的hostname来替代它。
 
 默认:
 
@@ -400,7 +400,7 @@ HRegionServer验证登录使用的kerberos keytab 文件路径。
 
 **hbase.regionserver.kerberos.principal**
 
-例如. &quot;hbase/[\[email protected]](mailto:[email protected])&quot;. HRegionServer运行需要使用 kerberos principal name. principal name 可以在: user/[email protected] 中获取. 如果 &quot;\_HOST&quot; 被用做hostname portion，需要使用实际运行的hostname来替代它。在这个文件中必须要有一个entry来描述 hbase.regionserver.keytab.file
+例如. &quot;hbase/[_HOST@EXAMPLE.COM](mailto:[email protected])&quot;. HRegionServer运行需要使用 kerberos principal name. principal name 可以在: user/[email protected] 中获取. 如果 &quot;\_HOST&quot; 被用做hostname portion，需要使用实际运行的hostname来替代它。在这个文件中必须要有一个entry来描述 hbase.regionserver.keytab.file
 
 默认:
 
@@ -676,155 +676,157 @@ Default: 2
 
 ## 摘录二
 
-\&lt;configuration\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.rpc.engine\&lt;/name\&gt;
-   \&lt;value\&gt;org.apache.hadoop.hbase.ipc.WritableRpcEngine\&lt;/value\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.hregion.max.filesize\&lt;/name\&gt;
-   \&lt;value\&gt;10737418240\&lt;/value\&gt;
-\&lt;!--默认值：256M:说明：在当前ReigonServer上单个Reigon的最大存储空间，单个Region超过该值时，这个Region会被自动split成更小的region。 --\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.rootdir\&lt;/name\&gt;
-   \&lt;value\&gt;hdfs://hadoop01:8020/apps/hbase/data\&lt;/value\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hfile.block.cache.size\&lt;/name\&gt;
-   \&lt;value\&gt;0.40\&lt;/value\&gt;
-\&lt;!--默认值：0.2:说明：storefile的读缓存占用Heap的大小百分比，0.2表示20%。该值直接影响数据读的性能
+```xml
+<configuration>
+   <property>
+   <name>hbase.rpc.engine</name>
+   <value>org.apache.hadoop.hbase.ipc.WritableRpcEngine</value>
+</property>
+   <property>
+   <name>hbase.hregion.max.filesize</name>
+   <value>10737418240</value>
+<!--默认值：256M:说明：在当前ReigonServer上单个Reigon的最大存储空间，单个Region超过该值时，这个Region会被自动split成更小的region。 -->
+</property>
+   <property>
+   <name>hbase.rootdir</name>
+   <value>hdfs://hadoop01:8020/apps/hbase/data</value>
+</property>
+   <property>
+   <name>hfile.block.cache.size</name>
+   <value>0.40</value>
+<!--默认值：0.2:说明：storefile的读缓存占用Heap的大小百分比，0.2表示20%。该值直接影响数据读的性能
 调优：当然是越大越好，如果写比读少很多，开到0.4-0.5也没问题。如果读写较均衡，0.3左右。如果写比读多，果断默认吧。
 设置这个值的时，同时要参考 hbase.regionserver.global.memstore.upperLimit ，该值是memstore占heap的最大百分比，
-两个参数一个影响读，一个影响写。如果两值加起来超过80-90%，会有OOM的风险，谨慎设置。--\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.regionserver.global.memstore.upperLimit\&lt;/name\&gt;
-   \&lt;value\&gt;0.4\&lt;/value\&gt;
-\&lt;!--默认值：0.4/0.35 upperlimit说明：hbase.hregion.memstore.flush.size 这个参数的作用是当单个Region内所有的memstore大小总和超过指定值时，flush该region的所有memstore。
+两个参数一个影响读，一个影响写。如果两值加起来超过80-90%，会有OOM的风险，谨慎设置。-->
+</property>
+   <property>
+   <name>hbase.regionserver.global.memstore.upperLimit</name>
+   <value>0.4</value>
+<!--默认值：0.4/0.35 upperlimit说明：hbase.hregion.memstore.flush.size 这个参数的作用是当单个Region内所有的memstore大小总和超过指定值时，flush该region的所有memstore。
 RegionServer的flush是通过将请求添加一个队列，模拟生产消费模式来异步处理的。那这里就有一个问题，当队列来不及消费，产生大量积压请求时，可能会导致内存陡增，最坏的情况是触发OOM。
-  这个参数的作用是防止内存占用过大，当ReigonServer内所有region的memstores所占用内存总和达到heap的40%时，HBase会强制block所有的更新并flush这些region以释放所有memstore占用的内存。 --\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.regionserver.global.memstore.lowerLimit\&lt;/name\&gt;
-   \&lt;value\&gt;0.38\&lt;/value\&gt;
-\&lt;!--lowerLimit说明： 同upperLimit，只不过lowerLimit在所有region的memstores所占用内存达到Heap的35%时，不flush所有的memstore。它会找一个memstore内存占用最大的region，做个别flush，此时写更新还是会被block。lowerLimit算是一个在所有region强制flush导致性能降低前的补救措施。
+  这个参数的作用是防止内存占用过大，当ReigonServer内所有region的memstores所占用内存总和达到heap的40%时，HBase会强制block所有的更新并flush这些region以释放所有memstore占用的内存。 -->
+</property>
+   <property>
+   <name>hbase.regionserver.global.memstore.lowerLimit</name>
+   <value>0.38</value>
+<!--lowerLimit说明： 同upperLimit，只不过lowerLimit在所有region的memstores所占用内存达到Heap的35%时，不flush所有的memstore。它会找一个memstore内存占用最大的region，做个别flush，此时写更新还是会被block。lowerLimit算是一个在所有region强制flush导致性能降低前的补救措施。
 在日志中，表现为 &quot;\*\* Flush thread woke up with memory above low water.&quot;
 调优：这是一个Heap内存保护参数，默认值已经能适用大多数场景。
    参数调整会影响读写，如果写的压力大导致经常超过这个阀值，则调小读缓存hfile.block.cache.size增大该阀值，或者Heap余量较多时，不修改读缓存大小。
-   如果在高压情况下，也没超过这个阀值，那么建议你适当调小这个阀值再做压测，确保触发次数不要太多，然后还有较多Heap余量的时候，调大hfile.block.cache.size提高读性能。--\&gt;
-\&lt;/property\&gt;
-\&lt;property\&gt;
-   \&lt;name\&gt;hbase.hregion.memstore.block.multiplier\&lt;/name\&gt;
-   \&lt;value\&gt;2\&lt;/value\&gt;
-\&lt;!--默认值：2:说明：当一个region里的memstore占用内存大小超过hbase.hregion.memstore.flush.size两倍的大小时，block该region的所有请求，进行flush，释放内存。
+   如果在高压情况下，也没超过这个阀值，那么建议你适当调小这个阀值再做压测，确保触发次数不要太多，然后还有较多Heap余量的时候，调大hfile.block.cache.size提高读性能。-->
+</property>
+<property>
+   <name>hbase.hregion.memstore.block.multiplier</name>
+   <value>2</value>
+<!--默认值：2:说明：当一个region里的memstore占用内存大小超过hbase.hregion.memstore.flush.size两倍的大小时，block该region的所有请求，进行flush，释放内存。
 调优： 这个参数的默认值还是比较靠谱的。如果你预估你的正常应用场景（不包括异常）不会出现突发写或写的量可控，那么保持默认值即可。
-如果正常情况下，你的写请求量就会经常暴长到正常的几倍，那么你应该调大这个倍数并调整其他参数值，比如hfile.block.cache.size和hbase.regionserver.global.memstore.upperLimit/lowerLimit，以预留更多内存，防止HBase server OOM。--\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;dfs.support.append\&lt;/name\&gt;
-   \&lt;value\&gt;true\&lt;/value\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.zookeeper.quorum\&lt;/name\&gt;
-   \&lt;value\&gt;hadoop04,hadoop05,hadoop06,hadoop07\&lt;/value\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;zookeeper.session.timeout\&lt;/name\&gt;
-   \&lt;value\&gt;60000\&lt;/value\&gt;
-\&lt;!--默认: 180000 ：zookeeper 会话超时时间，单位是毫秒 --\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.superuser\&lt;/name\&gt;
-   \&lt;value\&gt;hbase\&lt;/value\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.cluster.distributed\&lt;/name\&gt;
-   \&lt;value\&gt;true\&lt;/value\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.client.keyvalue.maxsize\&lt;/name\&gt;
-   \&lt;value\&gt;10485760\&lt;/value\&gt;
-\&lt;!--默认: 10485760 :一个KeyValue实例的最大size.这个是用来设置存储文件中的单个entry的大小上限。因为一个KeyValue是不能分割的，
-所以可以避免因为 数据过大导致region不可分割。明智的做法是把它设为可以被最大region  size整除的数。如果设置为0或者更小，就会禁用这个检查。默认10MB。  --\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.zookeeper.property.clientPort\&lt;/name\&gt;
-   \&lt;value\&gt;2181\&lt;/value\&gt;
-\&lt;!--默认: 2181 :ZooKeeper的zoo.conf中的配置。 客户端连接的端口 --\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.hstore.blockingStoreFiles\&lt;/name\&gt;
-   \&lt;value\&gt;7\&lt;/value\&gt;
-\&lt;!--默认: 7 : 当一个HStore含有多于这个值的HStoreFiles(每一个memstore flush产生一个HStoreFile)的时候，会执行一个合并操作，update会阻塞直到合并完成，直到超过了hbase.hstore.blockingWaitTime的值
-调优：block写请求会严重影响当前regionServer的响应时间，但过多的storefile也会影响读性能。从实际应用来看，为了获取较平滑的响应时间，可将值设为无限大。如果能容忍响应时间出现较大的波峰波谷，那么默认或根据自身场景调整即可。--\&gt;
-\&lt;/property\&gt;
-\&lt;property\&gt;
-   \&lt;name\&gt;hbase.hstore.blockingWaitTime\&lt;/name\&gt;
-   \&lt;value\&gt;90000\&lt;/value\&gt;
-\&lt;!--20140314添加
-默认: 90000 :hbase.hstore.blockingStoreFiles所限制的StoreFile数量会导致update阻塞，这个时间是来限制阻塞时间的。当超过了这个时间，HRegion会停止阻塞update操作，不过合并还有没有完成。默认为90s.--\&gt;
-\&lt;/property\&gt;
-\&lt;property\&gt;
-   \&lt;name\&gt;hbase.hstore.compactionThreshold\&lt;/name\&gt;
-   \&lt;value\&gt;3\&lt;/value\&gt;
-\&lt;!--默认: 3 ：当一个HStore含有多于这个值的HStoreFiles(每一个memstore flush产生一个HStoreFile)的时候，会执行一个合并操作，把这HStoreFiles写成一个。这个值越大，需要合并的时间就越长。--\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.hregion.majorcompaction\&lt;/name\&gt;
-   \&lt;value\&gt;86400000\&lt;/value\&gt;
-\&lt;!--默认: 86400000 :一个Region中的所有HStoreFile的major compactions的时间间隔。默认是1天。设置为0就是禁用这个功能。--\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.security.authorization\&lt;/name\&gt;
-   \&lt;value\&gt;false\&lt;/value\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.zookeeper.useMulti\&lt;/name\&gt;
-   \&lt;value\&gt;true\&lt;/value\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.client.scanner.caching\&lt;/name\&gt;
-   \&lt;value\&gt;100\&lt;/value\&gt;
-\&lt;!--默认: 1  :当调用Scanner的next方法，而值又不在缓存里的时候，从服务端一次获取的行数。越大的值意味着Scanner会快一些，但是会占用更多的内存。
-当缓冲被占满的时候，next方法调用会越来越慢。慢到一定程度，可能会导致超时。例如超过了 hbase.regionserver.lease.period。 --\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.defaults.for.version.skip\&lt;/name\&gt;
-   \&lt;value\&gt;true\&lt;/value\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;zookeeper.znode.parent\&lt;/name\&gt;
-   \&lt;value\&gt;/hbase-unsecure\&lt;/value\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.hregion.memstore.flush.size\&lt;/name\&gt;
-   \&lt;value\&gt;134217728\&lt;/value\&gt;
-\&lt;!--默认: 67108864 :当memstore的大小超过这个值的时候，会flush到磁盘。这个值被一个线程每隔hbase.server.thread.wakefrequency检查一下。--\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.regionserver.handler.count\&lt;/name\&gt;
-   \&lt;value\&gt;60\&lt;/value\&gt;
-\&lt;!--默认: 10  :RegionServers受理的RPC Server实例数量。对于Master来说，这个属性是Master受理的handler数量.--\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.hregion.memstore.mslab.enabled\&lt;/name\&gt;
-   \&lt;value\&gt;true\&lt;/value\&gt;
-\&lt;!--默认: false  :体验特性：启用memStore分配本地缓冲区。这个特性是为了防止在大量写负载的时候堆的碎片过多。这可以减少GC操作的频率。
-说明：减少因内存碎片导致的Full GC，提高整体性能。--\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.security.authentication\&lt;/name\&gt;
-   \&lt;value\&gt;simple\&lt;/value\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.tmp.dir\&lt;/name\&gt;
-   \&lt;value\&gt;/var/log/hbase\&lt;/value\&gt;
-\&lt;/property\&gt;
-   \&lt;property\&gt;
-   \&lt;name\&gt;hbase.master.info.bindAddress\&lt;/name\&gt;
-   \&lt;value\&gt;hadoop03\&lt;/value\&gt;
-   \&lt;description\&gt;Enter the HBase Master server hostname\&lt;/description\&gt;
-\&lt;/property\&gt;
+如果正常情况下，你的写请求量就会经常暴长到正常的几倍，那么你应该调大这个倍数并调整其他参数值，比如hfile.block.cache.size和hbase.regionserver.global.memstore.upperLimit/lowerLimit，以预留更多内存，防止HBase server OOM。-->
+</property>
+   <property>
+   <name>dfs.support.append</name>
+   <value>true</value>
+</property>
+   <property>
+   <name>hbase.zookeeper.quorum</name>
+   <value>hadoop04,hadoop05,hadoop06,hadoop07</value>
+</property>
+   <property>
+   <name>zookeeper.session.timeout</name>
+   <value>60000</value>
+<!--默认: 180000 ：zookeeper 会话超时时间，单位是毫秒 -->
+</property>
+   <property>
+   <name>hbase.superuser</name>
+   <value>hbase</value>
+</property>
+   <property>
+   <name>hbase.cluster.distributed</name>
+   <value>true</value>
+</property>
+   <property>
+   <name>hbase.client.keyvalue.maxsize</name>
+   <value>10485760</value>
+<!--默认: 10485760 :一个KeyValue实例的最大size.这个是用来设置存储文件中的单个entry的大小上限。因为一个KeyValue是不能分割的，
+所以可以避免因为 数据过大导致region不可分割。明智的做法是把它设为可以被最大region  size整除的数。如果设置为0或者更小，就会禁用这个检查。默认10MB。  -->
+</property>
+   <property>
+   <name>hbase.zookeeper.property.clientPort</name>
+   <value>2181</value>
+<!--默认: 2181 :ZooKeeper的zoo.conf中的配置。 客户端连接的端口 -->
+</property>
+   <property>
+   <name>hbase.hstore.blockingStoreFiles</name>
+   <value>7</value>
+<!--默认: 7 : 当一个HStore含有多于这个值的HStoreFiles(每一个memstore flush产生一个HStoreFile)的时候，会执行一个合并操作，update会阻塞直到合并完成，直到超过了hbase.hstore.blockingWaitTime的值
+调优：block写请求会严重影响当前regionServer的响应时间，但过多的storefile也会影响读性能。从实际应用来看，为了获取较平滑的响应时间，可将值设为无限大。如果能容忍响应时间出现较大的波峰波谷，那么默认或根据自身场景调整即可。-->
+</property>
+<property>
+   <name>hbase.hstore.blockingWaitTime</name>
+   <value>90000</value>
+<!--20140314添加
+默认: 90000 :hbase.hstore.blockingStoreFiles所限制的StoreFile数量会导致update阻塞，这个时间是来限制阻塞时间的。当超过了这个时间，HRegion会停止阻塞update操作，不过合并还有没有完成。默认为90s.-->
+</property>
+<property>
+   <name>hbase.hstore.compactionThreshold</name>
+   <value>3</value>
+<!--默认: 3 ：当一个HStore含有多于这个值的HStoreFiles(每一个memstore flush产生一个HStoreFile)的时候，会执行一个合并操作，把这HStoreFiles写成一个。这个值越大，需要合并的时间就越长。-->
+</property>
+   <property>
+   <name>hbase.hregion.majorcompaction</name>
+   <value>86400000</value>
+<!--默认: 86400000 :一个Region中的所有HStoreFile的major compactions的时间间隔。默认是1天。设置为0就是禁用这个功能。-->
+</property>
+   <property>
+   <name>hbase.security.authorization</name>
+   <value>false</value>
+</property>
+   <property>
+   <name>hbase.zookeeper.useMulti</name>
+   <value>true</value>
+</property>
+   <property>
+   <name>hbase.client.scanner.caching</name>
+   <value>100</value>
+<!--默认: 1  :当调用Scanner的next方法，而值又不在缓存里的时候，从服务端一次获取的行数。越大的值意味着Scanner会快一些，但是会占用更多的内存。
+当缓冲被占满的时候，next方法调用会越来越慢。慢到一定程度，可能会导致超时。例如超过了 hbase.regionserver.lease.period。 -->
+</property>
+   <property>
+   <name>hbase.defaults.for.version.skip</name>
+   <value>true</value>
+</property>
+   <property>
+   <name>zookeeper.znode.parent</name>
+   <value>/hbase-unsecure</value>
+</property>
+   <property>
+   <name>hbase.hregion.memstore.flush.size</name>
+   <value>134217728</value>
+<!--默认: 67108864 :当memstore的大小超过这个值的时候，会flush到磁盘。这个值被一个线程每隔hbase.server.thread.wakefrequency检查一下。-->
+</property>
+   <property>
+   <name>hbase.regionserver.handler.count</name>
+   <value>60</value>
+<!--默认: 10  :RegionServers受理的RPC Server实例数量。对于Master来说，这个属性是Master受理的handler数量.-->
+</property>
+   <property>
+   <name>hbase.hregion.memstore.mslab.enabled</name>
+   <value>true</value>
+<!--默认: false  :体验特性：启用memStore分配本地缓冲区。这个特性是为了防止在大量写负载的时候堆的碎片过多。这可以减少GC操作的频率。
+说明：减少因内存碎片导致的Full GC，提高整体性能。-->
+</property>
+   <property>
+   <name>hbase.security.authentication</name>
+   <value>simple</value>
+</property>
+   <property>
+   <name>hbase.tmp.dir</name>
+   <value>/var/log/hbase</value>
+</property>
+   <property>
+   <name>hbase.master.info.bindAddress</name>
+   <value>hadoop03</value>
+   <description>Enter the HBase Master server hostname</description>
+</property>
 
-\&lt;/configuration\&gt;
+</configuration>
+```
