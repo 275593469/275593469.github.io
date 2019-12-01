@@ -11,7 +11,7 @@ excerpt: Linux下Redis集群安装部署及使用详解
 
 # 一、应用场景介绍
 
-　　本文主要是介绍Redis集群在Linux环境下的安装讲解，其中主要包括在联网的Linux环境和脱机的Linux环境下是如何安装的。因为大多数时候，公司的生产环境是在内网环境下，无外网，服务器处于脱机状态（最近公司要上线项目，就是无外网环境的Linux，被离线安装坑惨了，走了很多弯路，说多了都是血泪史啊%\&gt;\_\&lt;%）。这也是笔者写本文的初衷，希望其他人少走弯路，下面就介绍如何在Linux安装部署Redis集群。
+　　本文主要是介绍Redis集群在Linux环境下的安装讲解，其中主要包括在联网的Linux环境和脱机的Linux环境下是如何安装的。因为大多数时候，公司的生产环境是在内网环境下，无外网，服务器处于脱机状态（最近公司要上线项目，就是无外网环境的Linux，被离线安装坑惨了，走了很多弯路，说多了都是血泪史啊%>_<%）。这也是笔者写本文的初衷，希望其他人少走弯路，下面就介绍如何在Linux安装部署Redis集群。
 
 # 二、安装环境及工具
 
@@ -37,7 +37,7 @@ excerpt: Linux下Redis集群安装部署及使用详解
 
 检查GCC是否安装，可以看看版本号
 
-$ gcc -v
+    $ gcc -v
 
 如果已经安装了GCC，则会显示以下信息
 
@@ -45,7 +45,7 @@ $ gcc -v
 
 如果没有任何信息，则我们可以通过命令yum install gcc-c++进行在线安装
 
-$ yum install gcc-c++
+    $ yum install gcc-c++
 
 如果没有网络的时候，我们就需要下载GCC的安装包进行手动安装了，具体方法还是比较复杂的，具体离线安装GCC的方法，请参考我的另外一篇文章《[Linux无网离线安装GCC](http://www.cnblogs.com/xuliangxing/p/7132018.html)》
 
@@ -53,8 +53,8 @@ $ yum install gcc-c++
 
 如果有网的话，则通过yum命令进行安装，自动将关联的依赖包全部安装
 
-$ yum install ruby
-$ yum install rubygems
+    $ yum install ruby
+    $ yum install rubygems
 
 如果是离线的状态，我们则可以选择下载Ruby和Rubygems，解压手动进行安装，具体的方法请参考我的另外两篇文件《[Linux 离线安装Ruby详解](http://www.cnblogs.com/xuliangxing/p/7132656.html)》和《[Linux 离线安装Rubygems详解](http://www.cnblogs.com/xuliangxing/p/7133544.html)》，这里我们不做多讲解。
 
@@ -68,17 +68,17 @@ $ yum install rubygems
 
 转到Redis的存放目录，然后通过命令解压Redis压缩包
 
-$ cd /home/cmfchina/redis
-
-$ tar -zxvf redis-3.2.9.tar.gz
+    $ cd /home/cmfchina/redis
+    
+    $ tar -zxvf redis-3.2.9.tar.gz
 
 ![image](/images/2019\03\redis\1569941963894.jpg "image")
 
 通过make命令进行安装Redis(需要root权限)
 
-$ cd /home/cmfchina/redis/redis-3.2.9
-
-$ make &amp;&amp; make install  //make 这里如果不指定PREFIX，默认将安装在/usr/local/bin下，保持默认就好
+    $ cd /home/cmfchina/redis/redis-3.2.9
+    
+    $ make && make install  //make 这里如果不指定PREFIX，默认将安装在/usr/local/bin下，保持默认就好
 
 ![image](/images/2019\03\redis\1569941963897.jpg "image")
 
@@ -96,9 +96,9 @@ $ make &amp;&amp; make install  //make 这里如果不指定PREFIX，默认将�
 
 ![image](/images/2019\03\redis\1569941963915.jpg "image")
 
-$ cd /home/cmfchina/redis/redis-3.2.9
-
-$ redis-server redis.conf  //所有相关配置信息都在conf里面，如果不设置，默认端口号为：6379
+    $ cd /home/cmfchina/redis/redis-3.2.9
+    
+    $ redis-server redis.conf  //所有相关配置信息都在conf里面，如果不设置，默认端口号为：6379
 
 ![image](/images/2019\03\redis\1569941963919.jpg "image")
 
@@ -128,8 +128,8 @@ $ redis-server redis.conf  //所有相关配置信息都在conf里面，如果�
 
 分别将这6个redis服务启动起来（命令redis-server redis.conf），一个一个去启动有点复杂，在redis目录创建一个sh脚本来启动6个实例
 
-1 $cd /home/cmfchina/redis
-2 $vim startall.sh 就会打开vim编辑器，创建一个空的文本
+    $ cd /home/cmfchina/redis
+    $ vim startall.sh 就会打开vim编辑器，创建一个空的文本
 
 ![image](/images/2019\03\redis\1569941963955.jpg "image")
 
@@ -141,9 +141,9 @@ $ redis-server redis.conf  //所有相关配置信息都在conf里面，如果�
 
 ![image](/images/2019\03\redis\1569941963962.jpg "image")
 
-$ chmod 777 startall.sh 分配权限
-
-$ sh -x startall.sh 执行脚本
+    $ chmod 777 startall.sh 分配权限
+    
+    $ sh -x startall.sh 执行脚本
 
 ![image](/images/2019\03\redis\1569941963964.jpg "image")
 
@@ -177,15 +177,15 @@ $ sh -x startall.sh 执行脚本
 
 在redis目录下执行命令：
 
-$ ./redis-trib.rb  create --replicas  1  127.0.0.1:7001  127.0.0.1:7002  127.0.0.1:7003  127.0.0.1:7004  127.0.0.1:7005  127.0.0.1:7006
+    $ ./redis-trib.rb  create --replicas  1  127.0.0.1:7001  127.0.0.1:7002  127.0.0.1:7003  127.0.0.1:7004  127.0.0.1:7005  127.0.0.1:7006
 
-**===============相关错误汇总解决方案（你以为上面是重点%\&gt;\_\&lt;%，其实下面这才是本文重点（太多坑）！！！）===============**
+**===============相关错误汇总解决方案（你以为上面是重点%>_<%，其实下面这才是本文重点（太多坑）！！！）===============**
 
 如果执行上述命令出现Ruby和Rubygems错误的话，那是没有安装Ruby和Rubygems，所有这就是为什么我们文章之前就要提前安装好Ruby和Rubygems。但是有些人说这两个我们已经安装了，为什么还会报如下错误的话
 
-/home/cmfchina/ruby/lib/ruby/site\_ruby/2.4.0/rubygems/core\_ext/kernel\_require.rb:55:in `require&#39;: cannot load such file -- redis (LoadError)
-from /home/cmfchina/ruby/lib/ruby/site\_ruby/2.4.0/rubygems/core\_ext/kernel\_require.rb:55:in `require&#39;
-from ./redis-trib.rb:25:in `\&lt;main\&gt;&#39;
+/home/cmfchina/ruby/lib/ruby/site_ruby/2.4.0/rubygems/core_ext/kernel_require.rb:55:in `require`;: cannot load such file -- redis (LoadError)
+from /home/cmfchina/ruby/lib/ruby/site_ruby/2.4.0/rubygems/core_ext/kernel_require.rb:55:in `require`;
+from ./redis-trib.rb:25:in `<main>`;
 
 ![image](/images/2019\03\redis\1569941963984.jpg "image")
 
@@ -195,49 +195,44 @@ from ./redis-trib.rb:25:in `\&lt;main\&gt;&#39;
 
 执行gem install redis-3.3.0.gem命令安装。
 
-$ gem install redis-3.3.0.gem
+    $ gem install redis-3.3.0.gem
 
 但是执行这个又报了错误，如果没有报错的话那就说明人品好啊......真是心塞~~~如图所示，这是因为需要依赖zlib工具。
 
 ERROR:  Loading command: install (LoadError)
     cannot load such file -- zlib
 ERROR:  While executing gem ... (NoMethodError)
-    undefined method `invoke\_with\_build\_args&#39; for nil:NilClass
+    undefined method `invoke_with_build_args`; for nil:NilClass
 
 ![image](/images/2019\03\redis\1569941964005.jpg "image")
 
 
-
 **第四步** 、我们需要再安装zlib才行，下载zlib，上传解压，安装zlib官方网站：[http://www.zlib.net](http://www.zlib.net/) ，最新版1.2.11，安装我们就一笔带过
 
-1 $tar -xvzf zlib-1.2.11.tar.gz
-2 $cd zlib-1.2.8.tar.gz
-3 $./configure --prefix=/usr/local/zlib  设置安装路径
-4 $make
-5 $make instal
+    $ tar -xvzf zlib-1.2.11.tar.gz
+    $ cd zlib-1.2.8.tar.gz
+    $ ./configure --prefix=/usr/local/zlib  设置安装路径
+    $ make
+    $ make instal
 
 安装完zlib之后，我们再需要执行以下命令
 
-1 $ cd /home/cmfchina/ruby/ruby-2.4.1/ext/zlib  备注：/home/cmfchina/ruby/ruby-2.4.1这个目录是ruby安装包后解压的目录，就是前面提到的ruby离线安装
-2$ ruby extconf.rb
-3 $ make &amp;&amp; make install
+    $ cd /home/cmfchina/ruby/ruby-2.4.1/ext/zlib  备注：/home/cmfchina/ruby/ruby-2.4.1这个目录是ruby安装包后解压的目录，就是前面提到的ruby离线安装
+    $ ruby extconf.rb
+    $ make && make install
 
 可是又报错了，真是无力吐槽了~~~错误信息如下
 
-![image](/images/2019\03\redis\1569941964012.jpg "image")
-
-checking for deflateReset() in -lz... no
-checking for deflateReset() in -llibz... no
-checking for deflateReset() in -lzlib1... no
-checking for deflateReset() in -lzlib... no
-checking for deflateReset() in -lzdll... no
-checking for deflateReset() in -lzlibwapi... no
-\*\*\* extconf.rb failed \*\*\*
-Could not create Makefile due to some reason, probably lack of necessary
-libraries and/or headers.  Check the mkmf.log filefor more details.  You may
-need configuration options.
-
-![image](/images/2019\03\redis\1569941964018.jpg "image")
+    checking for deflateReset() in -lz... no
+    checking for deflateReset() in -llibz... no
+    checking for deflateReset() in -lzlib1... no
+    checking for deflateReset() in -lzlib... no
+    checking for deflateReset() in -lzdll... no
+    checking for deflateReset() in -lzlibwapi... no
+    *** extconf.rb failed ***
+    Could not create Makefile due to some reason, probably lack of necessary
+    libraries and/or headers.  Check the mkmf.log filefor more details.  You may
+    need configuration options.
 
 ![image](/images/2019\03\redis\1569941964022.jpg "image")
 
@@ -245,19 +240,15 @@ need configuration options.
 
 安装好zlib，然后我们重新输入命令
 
-![image](/images/2019\03\redis\1569941964028.jpg "image")
-
-1 $ cd /home/cmfchina/ruby/ruby-2.4.1/ext/zlib
+    $ cd /home/cmfchina/ruby/ruby-2.4.1/ext/zlib
 
 备注：/home/cmfchina/ruby/ruby-2.4.1这个目录是ruby安装包后解压的目录，就是前面提到的ruby离线安装
 
-2 $ ruby extconf.rb  --with-zlib-include=/usr/local/zlib/include/ --with-zlib-lib=/usr/local/zlib/lib   //会生成一个Makefile文件
+    $ ruby extconf.rb  --with-zlib-include=/usr/local/zlib/include/ --with-zlib-lib=/usr/local/zlib/lib   //会生成一个Makefile文件
 
 备注：/usr/local/zlib是我的zlib安装目录
 
-3 $ make &amp;&amp; make install
-
-![image](/images/2019\03\redis\1569941964035.jpg "image")
+    $ make && make install
 
 这个时候会自动生成一个Makefile文件，如图所示
 
@@ -265,21 +256,21 @@ need configuration options.
 
 
 
-接下来我们make &amp;&amp; make install 安装一下，但是当我们make的时候，又出现了错误如下
+接下来我们make && make install 安装一下，但是当我们make的时候，又出现了错误如下
 
-make: \*\*\* No rule to make target `/include/ruby.h&#39;, needed by `zlib.o&#39;.  Stop
+make: *** No rule to make target `/include/ruby.h`;, needed by `zlib.o`;.  Stop
 
 ![image](/images/2019\03\redis\1569941964041.jpg "image")
 
 这个时候打开ext/zlib/Makefile文件，找到下面一行把路径进行修改一下。
 
-zlib.o: $(top\_srcdir)/include/ruby.h 改成：zlib.o: ../../include/ruby.h
+zlib.o: $(top_srcdir)/include/ruby.h 改成：zlib.o: ../../include/ruby.h
 
 如图所示
 
 ![image](/images/2019\03\redis\1569941964044.jpg "image")
 
-修改完成，然后保存：接着我们再make &amp;&amp; make install，这个时候安装成功了~~所以就放心地接着干吧！（没有看到我也无能为力了）安装完成后如下显示
+修改完成，然后保存：接着我们再make && make install，这个时候安装成功了~~所以就放心地接着干吧！（没有看到我也无能为力了）安装完成后如下显示
 
 ![image](/images/2019\03\redis\1569941964048.jpg "image")
 
@@ -293,11 +284,11 @@ zlib.o: $(top\_srcdir)/include/ruby.h 改成：zlib.o: ../../include/ruby.h
 
 **第五步** 、我们又得安装OpenSSL才行，官网地址：[https://www.openssl.org/source/](https://www.openssl.org/source/) 上次压缩包到服务器，解压，具体不做太细讲解
 
-1 $ tar -xzvf openssl-1.0.2l.tar.gz
-2 $ cd openssl-1.0.2l
-3 $ ./config -fPIC --prefix=/usr/local/openssl enable-shared
-4 $ ./config -t
-5 $ make &amp;&amp; make install
+    $ tar -xzvf openssl-1.0.2l.tar.gz
+    $ cd openssl-1.0.2l
+    $ ./config -fPIC --prefix=/usr/local/openssl enable-shared
+    $ ./config -t
+    $ make && make install
 
 安装openssl成功界面如下：
 
@@ -309,29 +300,23 @@ zlib.o: $(top\_srcdir)/include/ruby.h 改成：zlib.o: ../../include/ruby.h
 
 安装和zlib一样的方式安装openssl
 
-![image](/images/2019\03\redis\1569941964059.jpg "image")
-
-1 $ cd /home/cmfchina/ruby-2.4.1/ext/openssl
-2备注：/home/cmfchina/ruby/ruby-2.4.1这个目录是ruby安装包后解压的目录，就是前面提到的ruby离线安装
-
-3 $ruby extconf.rb  --with-openssl-include=/usr/local/openssl/include/ --with-openssl-lib=/usr/local/openssl/lib //会生成一个Makefile文件
-4备注：/usr/local/openssl是我的openssl安装目录
-
-5 $ make &amp;&amp; make install
-
-![image](/images/2019\03\redis\1569941964062.jpg "image")
+    $ cd /home/cmfchina/ruby-2.4.1/ext/openssl
+    备注：/home/cmfchina/ruby/ruby-2.4.1这个目录是ruby安装包后解压的目录，就是前面提到的ruby离线安装
+    $ruby extconf.rb  --with-openssl-include=/usr/local/openssl/include/ --with-openssl-lib=/usr/local/openssl/lib //会生成一个Makefile文件
+    备注：/usr/local/openssl是我的openssl安装目录
+    $ make && make install
 
 但是我们make的时候，又出现了和zlib类似的错误
 
-make: \*\*\* No rule to make target `/include/ruby.h&#39;, needed by `ossl.o&#39;.  Stop
+make: *** No rule to make target `/include/ruby.h`;, needed by `ossl.o`;.  Stop
 
 ![image](/images/2019\03\redis\1569941964064.jpg "image")
 
-还是按照刚刚zlib操作一样，打开Makefile文件，将$(top\_srcdir)全部改成../..
+还是按照刚刚zlib操作一样，打开Makefile文件，将$(top_srcdir)全部改成../..
 
 ![image](/images/2019\03\redis\1569941964066.jpg "image")
 
-修改后保存，再执行make &amp;&amp; make install，这一次安装成功了~~
+修改后保存，再执行make && make install，这一次安装成功了~~
 
 ![image](/images/2019\03\redis\1569941964070.jpg "image")
 
@@ -345,7 +330,7 @@ make: \*\*\* No rule to make target `/include/ruby.h&#39;, needed by `ossl.o&#39
 
 在redis目录下执行命令：
 
-$ ./redis-trib.rb  create --replicas  1  127.0.0.1:7001  127.0.0.1:7002  127.0.0.1:7003  127.0.0.1:7004  127.0.0.1:7005  127.0.0.1:7006
+    $ ./redis-trib.rb  create --replicas  1  127.0.0.1:7001  127.0.0.1:7002  127.0.0.1:7003  127.0.0.1:7004  127.0.0.1:7005  127.0.0.1:7006
 
 ![image](/images/2019\03\redis\1569941964076.jpg "image")
 
@@ -353,13 +338,13 @@ $ ./redis-trib.rb  create --replicas  1  127.0.0.1:7001  127.0.0.1:7002  127.0.0
 
 ![image](/images/2019\03\redis\1569941964080.jpg "image")
 
-# 第六、Redis集群测试
+# 六、Redis集群测试
 
 我们来测试一下Redis集群，通过连接任一redis端口，添加数据
 
-[[email protected] redis7001]# redis-cli -p 7001 -c
-
-[[email protected] redis7001]# redis-cli -c -h 127.0.0.1 -p 7001 shutdown //关闭集群，如果没有-h参数，默认连接127.0.0.1，如果没有-p参数，默认连接6370端口（所有如果用默认的，就没有-h -p）
+    [root@localhost redis7001]# redis-cli -p 7001 -c
+    
+    [root@localhost redis7001]# redis-cli -c -h 127.0.0.1 -p 7001 shutdown //关闭集群，如果没有-h参数，默认连接127.0.0.1，如果没有-p参数，默认连接6370端口（所有如果用默认的，就没有-h -p）
 
 说明：-h+host –p+端口号 –c 是要连接集群，注意坑，不加会报错的
 
