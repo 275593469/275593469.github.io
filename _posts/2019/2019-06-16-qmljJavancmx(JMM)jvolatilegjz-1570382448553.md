@@ -35,43 +35,6 @@ excerpt: 全面理解Java内存模型(JMM)及volatile关键字
 
 本篇主要结合博主个人对Java内存模型的理解以及相关书籍内容的分析作为前提，对JMM进行较为全面的分析，本篇的写作思路是先阐明Java内存区域划分、硬件内存架构、Java多线程的实现原理与Java内存模型的具体关系，在弄明白它们间的关系后，进一步分析Java内存模型作用以及一些必要的实现手段，以下是本篇主要内容（如有错误，欢迎留言，谢谢！）
 
-1. [理解Java内存区域与Java内存模型](https://blog.csdn.net/javazejian/article/details/72772461#%E7%90%86%E8%A7%A3java%E5%86%85%E5%AD%98%E5%8C%BA%E5%9F%9F%E4%B8%8Ejava%E5%86%85%E5%AD%98%E6%A8%A1%E5%9E%8B)
-
-1.
-  1. [Java内存区域](https://blog.csdn.net/javazejian/article/details/72772461#java%E5%86%85%E5%AD%98%E5%8C%BA%E5%9F%9F)
-  2. [Java内存模型概述](https://blog.csdn.net/javazejian/article/details/72772461#java%E5%86%85%E5%AD%98%E6%A8%A1%E5%9E%8B%E6%A6%82%E8%BF%B0)
-
-1. [硬件内存架构与Java内存模型](https://blog.csdn.net/javazejian/article/details/72772461#%E7%A1%AC%E4%BB%B6%E5%86%85%E5%AD%98%E6%9E%B6%E6%9E%84%E4%B8%8Ejava%E5%86%85%E5%AD%98%E6%A8%A1%E5%9E%8B)
-
-1.
-  1. [硬件内存架构](https://blog.csdn.net/javazejian/article/details/72772461#%E7%A1%AC%E4%BB%B6%E5%86%85%E5%AD%98%E6%9E%B6%E6%9E%84)
-  2. [Java线程与硬件处理器](https://blog.csdn.net/javazejian/article/details/72772461#java%E7%BA%BF%E7%A8%8B%E4%B8%8E%E7%A1%AC%E4%BB%B6%E5%A4%84%E7%90%86%E5%99%A8)
-  3. [Java内存模型与硬件内存架构的关系](https://blog.csdn.net/javazejian/article/details/72772461#java%E5%86%85%E5%AD%98%E6%A8%A1%E5%9E%8B%E4%B8%8E%E7%A1%AC%E4%BB%B6%E5%86%85%E5%AD%98%E6%9E%B6%E6%9E%84%E7%9A%84%E5%85%B3%E7%B3%BB)
-
-1. [JMM存在的必要性](https://blog.csdn.net/javazejian/article/details/72772461#jmm%E5%AD%98%E5%9C%A8%E7%9A%84%E5%BF%85%E8%A6%81%E6%80%A7)
-2. [Java内存模型的承诺](https://blog.csdn.net/javazejian/article/details/72772461#java%E5%86%85%E5%AD%98%E6%A8%A1%E5%9E%8B%E7%9A%84%E6%89%BF%E8%AF%BA)
-
-1.
-  1. [原子性](https://blog.csdn.net/javazejian/article/details/72772461#%E5%8E%9F%E5%AD%90%E6%80%A7)
-  2. [理解指令重排](https://blog.csdn.net/javazejian/article/details/72772461#%E7%90%86%E8%A7%A3%E6%8C%87%E4%BB%A4%E9%87%8D%E6%8E%92)
-
-1.
-  1.
-    1. [编译器重排](https://blog.csdn.net/javazejian/article/details/72772461#%E7%BC%96%E8%AF%91%E5%99%A8%E9%87%8D%E6%8E%92)
-    2. [处理器指令重排](https://blog.csdn.net/javazejian/article/details/72772461#%E5%A4%84%E7%90%86%E5%99%A8%E6%8C%87%E4%BB%A4%E9%87%8D%E6%8E%92)
-
-1.
-  1. [可见性](https://blog.csdn.net/javazejian/article/details/72772461#%E5%8F%AF%E8%A7%81%E6%80%A7)
-  2. [有序性](https://blog.csdn.net/javazejian/article/details/72772461#%E6%9C%89%E5%BA%8F%E6%80%A7)
-  3. [JMM提供的解决方案](https://blog.csdn.net/javazejian/article/details/72772461#jmm%E6%8F%90%E4%BE%9B%E7%9A%84%E8%A7%A3%E5%86%B3%E6%96%B9%E6%A1%88)
-  4. [理解JMM中的happens-before 原则](https://blog.csdn.net/javazejian/article/details/72772461#%E7%90%86%E8%A7%A3jmm%E4%B8%AD%E7%9A%84happens-before-%E5%8E%9F%E5%88%99)
-
-1. [volatile内存语义](https://blog.csdn.net/javazejian/article/details/72772461#volatile%E5%86%85%E5%AD%98%E8%AF%AD%E4%B9%89)
-
-1.
-  1. [volatile的可见性](https://blog.csdn.net/javazejian/article/details/72772461#volatile%E7%9A%84%E5%8F%AF%E8%A7%81%E6%80%A7)
-  2. [volatile禁止重排优化](https://blog.csdn.net/javazejian/article/details/72772461#volatile%E7%A6%81%E6%AD%A2%E9%87%8D%E6%8E%92%E4%BC%98%E5%8C%96)
-
 # 理解Java内存区域与Java内存模型
 
 **Java内存区域**
@@ -160,7 +123,7 @@ Java内存模型(即Java Memory Model，简称JMM)本身是一种抽象的概念
 
 **原子性**
 
-原子性指的是一个操作是不可中断的，即使是在多线程环境下，一个操作一旦开始就不会被其他线程影响。比如对于一个静态变量int x，两条线程同时对他赋值，线程A赋值为1，而线程B赋值为2，不管线程如何运行，最终x的值要么是1，要么是2，线程A和线程B间的操作是没有干扰的，这就是原子性操作，不可被中断的特点。有点要注意的是，对于32位系统的来说，long类型数据和double类型数据(对于基本数据类型，byte,short,int,float,boolean,char读写是原子操作)，它们的读写并非原子性的，也就是说如果存在两条线程同时对long类型或者double类型的数据进行读写是存在相互干扰的，因为对于32位虚拟机来说，每次原子读写是32位的，而long和double则是64位的存储单元，这样会导致一个线程在写时，操作完前32位的原子操作后，轮到B线程读取时，恰好只读取到了后32位的数据，这样可能会读取到一个既非原值又不是线程修改值的变量，它可能是&quot;半个变量&quot;的数值，即64位数据被两个线程分成了两次读取。但也不必太担心，因为读取到&quot;半个变量&quot;的情况比较少见，至少在目前的商用的虚拟机中，几乎都把64位的数据的读写操作作为原子操作来执行，因此对于这个问题不必太在意，知道这么回事即可。
+原子性指的是一个操作是不可中断的，即使是在多线程环境下，一个操作一旦开始就不会被其他线程影响。比如对于一个静态变量int x，两条线程同时对他赋值，线程A赋值为1，而线程B赋值为2，不管线程如何运行，最终x的值要么是1，要么是2，线程A和线程B间的操作是没有干扰的，这就是原子性操作，不可被中断的特点。有点要注意的是，对于32位系统的来说，long类型数据和double类型数据(对于基本数据类型，byte,short,int,float,boolean,char读写是原子操作)，它们的读写并非原子性的，也就是说如果存在两条线程同时对long类型或者double类型的数据进行读写是存在相互干扰的，因为对于32位虚拟机来说，每次原子读写是32位的，而long和double则是64位的存储单元，这样会导致一个线程在写时，操作完前32位的原子操作后，轮到B线程读取时，恰好只读取到了后32位的数据，这样可能会读取到一个既非原值又不是线程修改值的变量，它可能是"半个变量"的数值，即64位数据被两个线程分成了两次读取。但也不必太担心，因为读取到"半个变量"的情况比较少见，至少在目前的商用的虚拟机中，几乎都把64位的数据的读写操作作为原子操作来执行，因此对于这个问题不必太在意，知道这么回事即可。
 
 **理解指令重排**
 
@@ -184,15 +147,15 @@ Java内存模型(即Java Memory Model，简称JMM)本身是一种抽象的概念
 
 下面我们简单看一个编译器重排的例子：
 
-线程 1             线程 2
-1： x2 = a ;      3: x1 = b ;
-2: b = 1;         4: a = 2 ;
+    线程 1             线程 2
+    1： x2 = a ;      3: x1 = b ;
+    2: b = 1;         4: a = 2 ;
 
 两个线程同时执行，分别有1、2、3、4四段执行代码，其中1、2属于线程1 ， 3、4属于线程2 ，从程序的执行顺序上看，似乎不太可能出现x1 = 1 和x2 = 2 的情况，但实际上这种情况是有可能发现的，因为如果编译器对这段程序代码执行重排优化后，可能出现下列情况
 
-线程 1              线程 2
-2: b = 1;          4: a = 2 ;
-1：x2 = a ;        3: x1 = b ;
+    线程 1              线程 2
+    2: b = 1;          4: a = 2 ;
+    1：x2 = a ;        3: x1 = b ;
 
 这种执行顺序下就有可能出现x1 = 1 和x2 = 2 的情况，这也就说明在多线程环境下，由于编译器优化重排的存在，两个线程中使用的变量能否保证一致性是无法确定的。
 
@@ -212,8 +175,8 @@ CPU在工作时，需要将上述指令分为多个步骤依次执行(注意硬�
 
 从图中可以看出当指令1还未执行完成时，第2条指令便利用空闲的硬件开始执行，这样做是有好处的，如果每个步骤花费1ms，那么如果第2条指令需要等待第1条指令执行完成后再执行的话，则需要等待5ms，但如果使用流水线技术的话，指令2只需等待1ms就可以开始执行了，这样就能大大提升CPU的执行性能。虽然流水线技术可以大大提升CPU的性能，但不幸的是一旦出现流水中断，所有硬件设备将会进入一轮停顿期，当再次弥补中断点可能需要几个周期，这样性能损失也会很大，就好比工厂组装手机的流水线，一旦某个零件组装中断，那么该零件往后的工人都有可能进入一轮或者几轮等待组装零件的过程。因此我们需要尽量阻止指令中断的情况，指令重排就是其中一种优化中断的手段，我们通过一个例子来阐明指令重排是如何阻止流水线技术中断的
 
-a = b + c ;
-d = e + f ;
+    a = b + c ;
+    d = e + f ;
 
 下面通过汇编指令展示了上述代码在CPU执行的处理过程
 
@@ -234,28 +197,30 @@ d = e + f ;
 
 正如上图所示，所有的停顿都完美消除了，指令流水线也无需中断了，这样CPU的性能也能带来很好的提升，这就是处理器指令重排的作用。关于编译器重排以及指令重排(这两种重排我们后面统一称为指令重排)相关内容已阐述清晰了，我们必须意识到对于单线程而已指令重排几乎不会带来任何影响，比竟重排的前提是保证串行语义执行的一致性，但对于多线程环境而已，指令重排就可能导致严重的程序轮序执行问题，如下
 
+```java
 class MixedOrder{
     int a = 0;
     boolean flag = false;
-    publicvoidwriter(){
+    public void writer(){
         a = 1;
         flag = true;
     }
 
-    publicvoidread(){
+    public void read(){
         if(flag){
-            int i = a + 1；
+            int i = a + 1;
         }
     }
 }
+```
 
 如上述代码，同时存在线程A和线程B对该实例对象进行操作，其中A线程调用写入方法，而B线程调用读取方法，由于指令重排等原因，可能导致程序执行顺序变为如下：
 
- 线程A                    线程B
- writer：                 read：
-1:flag = true;           1:flag = true;
-2:a = 1;                 2: a = 0 ; //误读
-                          3: i = 1 ;
+     线程A                    线程B
+     writer：                 read：
+    1:flag = true;           1:flag = true;
+    2:a = 1;                 2: a = 0 ; //误读
+                              3: i = 1 ;
 
 由于指令重排的原因，线程A的flag置为true被提前执行了，而a赋值为1的程序还未执行完，此时线程B，恰好读取flag的值为true，直接获取a的值（此时B线程并不知道a为0）并执行i赋值操作，结果i的值为1，而不是预期的2，这就是多线程环境下，指令重排导致的程序乱序执行的结果。因此，请记住，指令重排只会保证单线程中串行语义的执行的一致性，但并不会关心多线程间的语义一致性。
 
@@ -286,20 +251,22 @@ class MixedOrder{
 
 上述8条原则无需手动添加任何同步手段(synchronized|volatile)即可达到效果，下面我们结合前面的案例演示这8条原则如何判断线程是否安全，如下：
 
+```java
 class MixedOrder{
     int a = 0;
     boolean flag = false;
-    publicvoidwriter(){
+    public void writer(){
         a = 1;
         flag = true;
     }
 
-    publicvoidread(){
+    public void read(){
         if(flag){
-            int i = a + 1；
+            int i = a + 1;
         }
     }
 }
+```
 
 同样的道理，存在两条线程A和B，线程A调用实例对象的writer()方法，而线程B调用实例对象的read()方法，线程A先启动而线程B后启动，那么线程B读取到的i值是多少呢？现在依据8条原则，由于存在两条线程同时调用，因此程序次序原则不合适。writer()方法和read()方法都没有使用同步手段，锁规则也不合适。没有使用volatile关键字，volatile变量原则不适应。线程启动规则、线程终止规则、线程中断规则、对象终结规则、传递性和本次测试案例也不合适。线程A和线程B的启动时间虽然有先后，但线程B执行结果却是不确定，也是说上述代码没有适合8条原则中的任意一条，也没有使用任何同步手段，所以上述的操作是线程不安全的，因此线程B读取的值自然也是不确定的。修复这个问题的方式很简单，要么给writer()方法和read()方法添加同步手段，如synchronized或者给变量flag添加volatile关键字，确保线程A修改的值对线程B总是可见。
 
@@ -314,40 +281,46 @@ volatile在并发编程中很常见，但也容易被滥用，现在我们就进
 
 关于volatile的可见性作用，我们必须意识到被volatile修饰的变量对所有线程总数立即可见的，对volatile变量的所有写操作总是能立刻反应到其他线程中，但是对于volatile变量运算操作在多线程环境并不保证安全性，如下
 
-publicclass VolatileVisibility {
-    publicstaticvolatileint i =0;
+```java
+public class VolatileVisibility {
+    public static volatileint i =0;
 
-    publicstaticvoidincrease(){
+    public static void increase(){
         i++;
     }
 }
+```
 
 正如上述代码所示，i变量的任何改变都会立马反应到其他线程中，但是如此存在多条线程同时调用increase()方法的话，就会出现线程安全问题，毕竟i++;操作并不具备原子性，该操作是先读取值，然后写回一个新值，相当于原来的值加上1，分两步完成，如果第二个线程在第一个线程读取旧值和写回新值期间读取i的域值，那么第二个线程就会与第一个线程一起看到同一个值，并执行相同值的加1操作，这也就造成了线程安全失败，因此对于increase方法必须使用synchronized修饰，以便保证线程安全，需要注意的是一旦使用synchronized修饰方法后，由于synchronized本身也具备与volatile相同的特性，即可见性，因此在这样种情况下就完全可以省去volatile修饰变量。
 
-publicclass VolatileVisibility {
-    publicstaticint i =0;
+```java
+public class VolatileVisibility {
+    public static int i =0;
 
-    public synchronized staticvoidincrease(){
+    public synchronized static void increase(){
         i++;
     }
 }
+```
 
 现在来看另外一种场景，可以使用volatile修饰变量达到线程安全的目的，如下
 
-publicclass VolatileSafe {
+```java
+public class VolatileSafe {
 
     volatile boolean close;
 
-    publicvoidclose(){
+    public void close(){
         close=true;
     }
 
-    publicvoiddoWork(){
+    public void doWork(){
         while (!close){
-            System.out.println(&quot;safe....&quot;);
+            System.out.println("safe....");
         }
     }
 }
+```
 
 由于对于boolean变量close值的修改属于原子性操作，因此可以通过使用volatile修饰变量close，使用该变量对其他线程立即可见，从而达到线程安全的目的。那么JMM是如何实现让volatile变量对其他线程立即可见的呢？实际上，当写一个volatile变量时，JMM会把该线程对应的工作内存中的共享变量值刷新到主内存中，当读取一个volatile变量时，JMM会把该线程对应的工作内存置为无效，那么该线程将只能从主内存中重新读取共享变量。volatile变量正是通过这种写-读方式实现对其他线程可见（但其内存语义实现则是通过内存屏障，稍后会说明）。
 
@@ -357,24 +330,25 @@ volatile关键字另一个作用就是禁止指令重排优化，从而避免多
 
 内存屏障，又称内存栅栏，是一个CPU指令，它的作用有两个，一是保证特定操作的执行顺序，二是保证某些变量的内存可见性（利用该特性实现volatile的内存可见性）。由于编译器和处理器都能执行指令重排优化。如果在指令间插入一条Memory Barrier则会告诉编译器和CPU，不管什么指令都不能和这条Memory Barrier指令重排序，也就是说通过插入内存屏障禁止在内存屏障前后的指令执行重排序优化。Memory Barrier的另外一个作用是强制刷出各种CPU的缓存数据，因此任何CPU上的线程都能读取到这些数据的最新版本。总之，volatile变量正是通过内存屏障实现其在内存中的语义，即可见性和禁止重排优化。下面看一个非常典型的禁止重排优化的例子DCL，如下：
 
-/\*\*
- \* Created by zejian on 2017/6/11.
- \* Blog : http://blog.csdn.net/javazejian [原文地址,请尊重原创]
- \*/
-publicclass DoubleCheckLock {
+```java
+/**
+ * Created by zejian on 2017/6/11.
+ * Blog : http://blog.csdn.net/javazejian [原文地址,请尊重原创]
+ */
+public class DoubleCheckLock {
 
-    privatestatic DoubleCheckLock instance;
+    private static DoubleCheckLock instance;
 
-    privateDoubleCheckLock(){}
+    private DoubleCheckLock(){}
 
-    publicstatic DoubleCheckLock getInstance(){
+    public static DoubleCheckLock getInstance(){
 
-        _//第一次检测_
+        //第一次检测
         if (instance==null){
-            _//同步_
+            //同步
             synchronized (DoubleCheckLock.class){
                 if (instance == null){
-                    _//多线程环境下可能会出现问题的地方_
+                    //多线程环境下可能会出现问题的地方
                     instance = new DoubleCheckLock();
                 }
             }
@@ -382,23 +356,30 @@ publicclass DoubleCheckLock {
         return instance;
     }
 }
+```
 
 上述代码一个经典的单例的双重检测的代码，这段代码在单线程环境下并没有什么问题，但如果在多线程环境下就可以出现线程安全问题。原因在于某一个线程执行到第一次检测，读取到的instance不为null时，instance的引用对象可能没有完成初始化。因为instance = new DoubleCheckLock();可以分为以下3步完成(伪代码)
 
-memory = allocate(); _//1.分配对象内存空间_
-instance(memory);    _//2.初始化对象_
-instance = memory;   _//3.设置instance指向刚分配的内存地址，此时instance！=null_
+```java
+memory = allocate(); //1.分配对象内存空间
+instance(memory);    //2.初始化对象
+instance = memory;   //3.设置instance指向刚分配的内存地址，此时instance！=null
+```
 
 由于步骤1和步骤2间可能会重排序，如下：
 
-memory = allocate(); _//1.分配对象内存空间_
-instance = memory;   _//3.设置instance指向刚分配的内存地址，此时instance！=null，但是对象还没有初始化完成！_
-instance(memory);    _//2.初始化对象_
+```java
+memory = allocate(); //1.分配对象内存空间
+instance = memory;   //3.设置instance指向刚分配的内存地址，此时instance！=null，但是对象还没有初始化完成！
+instance(memory);    //2.初始化对象
+```
 
 由于步骤2和步骤3不存在数据依赖关系，而且无论重排前还是重排后程序的执行结果在单线程中并没有改变，因此这种重排优化是允许的。但是指令重排只会保证串行语义的执行的一致性(单线程)，但并不会关心多线程间的语义一致性。所以当一条线程访问instance不为null时，由于instance实例未必已初始化完成，也就造成了线程安全问题。那么该如何解决呢，很简单，我们使用volatile禁止instance变量被执行指令重排优化即可。
 
-  _//禁止指令重排优化_
-  privatevolatilestatic DoubleCheckLock instance;
+```java
+  //禁止指令重排优化
+  private volatile static DoubleCheckLock instance;
+```
 
 ok~，到此相信我们对Java内存模型和volatile应该都有了比较全面的认识，总而言之，我们应该清楚知道，JMM就是一组规则，这组规则意在解决在并发编程可能出现的线程安全问题，并提供了内置解决方案（happen-before原则）及其外部可使用的同步手段(synchronized/volatile等)，确保了程序执行在多线程环境中的应有的原子性，可视性及其有序性。
 
